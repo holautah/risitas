@@ -1,0 +1,1850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RISO — Risograph Emulator</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@300;400;500;600;700;900&family=Courier+Prime:wght@400;700&display=swap');
+
+:root {
+  --bg: #1a1714;
+  --panel: #221f1b;
+  --panel2: #2a2621;
+  --border: #3d3830;
+  --border2: #4a4238;
+  --text: #e8dfc8;
+  --text-dim: #8a7d68;
+  --text-dimmer: #574f42;
+  --accent: #e84b3a;
+  --accent2: #f0c040;
+  --ink: #ff5a5a;
+
+  --riso-pink: #FF48B0;
+  --riso-red: #F15060;
+  --riso-blue: #3255A4;
+  --riso-medblue: #4D80C8;
+  --riso-yellow: #FFE800;
+  --riso-teal: #00A99D;
+  --riso-green: #56A149;
+  --riso-purple: #7B5EA7;
+  --riso-black: #212121;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+  font-family: 'Space Mono', monospace;
+  background: var(--bg);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ─── LAYOUT ─────────────────────────────────────── */
+#app {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+}
+
+/* ─── PANEL ──────────────────────────────────────── */
+#panel {
+  width: 300px;
+  min-width: 300px;
+  height: 100vh;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+#panel-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#panel-header .logo {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 26px;
+  letter-spacing: 0.12em;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+#panel-header .logo span {
+  color: var(--accent);
+}
+
+#panel-header .subtitle {
+  font-size: 9px;
+  letter-spacing: 0.18em;
+  color: var(--text-dim);
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+#panel-scroll {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 12px 0 20px;
+}
+
+#panel-scroll::-webkit-scrollbar { width: 4px; }
+#panel-scroll::-webkit-scrollbar-track { background: transparent; }
+#panel-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+/* ─── SECTIONS ───────────────────────────────────── */
+.section {
+  padding: 0 16px;
+  margin-bottom: 4px;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 4px 6px;
+  cursor: pointer;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.section-header .s-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+.section-header .s-arrow {
+  font-size: 8px;
+  color: var(--text-dimmer);
+  transition: transform 0.2s;
+}
+
+.section-header.collapsed .s-arrow { transform: rotate(-90deg); }
+.section-body { }
+.section-body.hidden { display: none; }
+
+/* ─── UPLOAD ─────────────────────────────────────── */
+#upload-zone {
+  border: 1.5px dashed var(--border2);
+  border-radius: 4px;
+  padding: 18px 12px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+  position: relative;
+  overflow: hidden;
+}
+
+#upload-zone:hover, #upload-zone.drag-over {
+  border-color: var(--accent);
+  background: rgba(232,75,58,0.05);
+}
+
+#upload-zone .uz-icon {
+  font-size: 24px;
+  margin-bottom: 6px;
+  display: block;
+  opacity: 0.6;
+}
+
+#upload-zone .uz-text {
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  display: block;
+}
+
+#upload-zone .uz-hint {
+  font-size: 8px;
+  color: var(--text-dimmer);
+  margin-top: 3px;
+  display: block;
+}
+
+#file-input { display: none; }
+
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 2px;
+  margin-bottom: 4px;
+}
+
+.toggle-label {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.toggle {
+  width: 30px;
+  height: 16px;
+  background: var(--border2);
+  border-radius: 8px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle.on { background: var(--accent); }
+
+.toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 12px;
+  height: 12px;
+  background: var(--text);
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle.on::after { transform: translateX(14px); }
+
+/* ─── COLORS ─────────────────────────────────────── */
+.color-count-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.color-count-row .cc-label {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  flex: 1;
+}
+
+.count-btns {
+  display: flex;
+  gap: 3px;
+}
+
+.count-btn {
+  width: 22px;
+  height: 22px;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.count-btn:hover { border-color: var(--accent); color: var(--accent); }
+.count-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
+
+#color-channels {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  position: relative;
+}
+
+.channel-swatch {
+  width: 18px;
+  height: 18px;
+  border-radius: 2px;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 1.5px solid rgba(0,0,0,0.3);
+}
+
+.channel-name {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  flex: 1;
+  cursor: pointer;
+}
+
+.channel-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #1e1b17;
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  padding: 6px;
+  display: none;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 2px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+}
+
+.channel-dropdown.open { display: flex; }
+
+.color-option {
+  width: 22px;
+  height: 22px;
+  border-radius: 3px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color 0.15s, transform 0.1s;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.color-option:hover { transform: scale(1.15); border-color: white; }
+.color-option.selected { border-color: white; }
+
+.color-option[title="Custom"] {
+  background: conic-gradient(red,orange,yellow,green,blue,violet,red);
+}
+
+.channel-opacity {
+  width: 50px;
+  -webkit-appearance: none;
+  height: 3px;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.channel-opacity::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+}
+
+/* ─── SELECT ─────────────────────────────────────── */
+.param-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.param-label {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  min-width: 70px;
+  flex-shrink: 0;
+}
+
+.riso-select {
+  flex: 1;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  color: var(--text);
+  font-family: 'Space Mono', monospace;
+  font-size: 9px;
+  padding: 5px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  outline: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5'%3E%3Cpath d='M0 0l4 5 4-5z' fill='%23574f42'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  padding-right: 22px;
+}
+
+.riso-select:focus { border-color: var(--accent); }
+
+/* ─── SLIDER ─────────────────────────────────────── */
+.slider-row {
+  margin-bottom: 8px;
+}
+
+.slider-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
+.slider-meta .sl-label {
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+}
+
+.slider-meta .sl-value {
+  font-family: 'Courier Prime', monospace;
+  font-size: 10px;
+  color: var(--accent2);
+  min-width: 30px;
+  text-align: right;
+}
+
+.riso-slider {
+  width: 100%;
+  -webkit-appearance: none;
+  height: 3px;
+  background: var(--border2);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.riso-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--text);
+  cursor: pointer;
+  border: 2px solid var(--bg);
+  box-shadow: 0 0 0 1px var(--border2);
+  transition: background 0.15s;
+}
+
+.riso-slider:hover::-webkit-slider-thumb { background: var(--accent2); }
+
+/* ─── MISREG XY PAD ──────────────────────────────── */
+#misreg-pad-wrap {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+#misreg-pad {
+  width: 72px;
+  height: 72px;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 4px;
+  position: relative;
+  cursor: crosshair;
+  flex-shrink: 0;
+}
+
+#misreg-pad::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border2);
+  transform: translateY(-50%);
+}
+
+#misreg-pad::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--border2);
+  transform: translateX(-50%);
+}
+
+#misreg-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: var(--accent);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  top: 50%;
+  left: 50%;
+  pointer-events: none;
+  box-shadow: 0 0 6px var(--accent);
+}
+
+.misreg-vals {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.misreg-val {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.misreg-val span:first-child {
+  font-size: 9px;
+  color: var(--text-dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.misreg-val span:last-child {
+  font-family: 'Courier Prime', monospace;
+  font-size: 10px;
+  color: var(--accent2);
+}
+
+/* ─── CHIP BUTTONS ───────────────────────────────── */
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 8px;
+}
+
+.chip {
+  padding: 4px 8px;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+
+.chip:hover { border-color: var(--accent2); color: var(--accent2); }
+.chip.active { background: rgba(240,192,64,0.12); border-color: var(--accent2); color: var(--accent2); }
+
+/* ─── PAPER CHIPS ────────────────────────────────── */
+.paper-chip {
+  padding: 5px 8px;
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 10px;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+
+.paper-chip:hover { border-color: var(--text-dim); }
+
+.paper-chip.active { border-color: var(--text); }
+
+/* ─── ACTION ROW ─────────────────────────────────── */
+#panel-actions {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+}
+
+.btn-process {
+  flex: 1;
+  padding: 10px;
+  background: var(--accent);
+  border: none;
+  border-radius: 3px;
+  color: white;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  font-size: 14px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.1s;
+}
+
+.btn-process:hover { background: #ff6b5a; }
+.btn-process:active { transform: scale(0.98); }
+
+.btn-export {
+  padding: 10px 12px;
+  background: transparent;
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  color: var(--text-dim);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-export:hover { border-color: var(--text); color: var(--text); }
+
+/* ─── CANVAS AREA ────────────────────────────────── */
+#canvas-area {
+  flex: 1;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
+}
+
+#canvas-toolbar {
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-shrink: 0;
+  background: var(--panel);
+}
+
+#canvas-toolbar .ct-info {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  color: var(--text-dimmer);
+  text-transform: uppercase;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 500;
+}
+
+#canvas-toolbar .ct-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--border);
+}
+
+.zoom-btns {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.zoom-btn {
+  width: 24px;
+  height: 24px;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  font-size: 14px;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.zoom-btn:hover { color: var(--text); border-color: var(--text-dim); }
+
+#canvas-container {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  padding: 40px;
+}
+
+#canvas-container::-webkit-scrollbar { width: 6px; height: 6px; }
+#canvas-container::-webkit-scrollbar-track { background: transparent; }
+#canvas-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+/* dot grid background */
+#canvas-container::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image: radial-gradient(circle, rgba(255,255,255,0.04) 1px, transparent 1px);
+  background-size: 24px 24px;
+  pointer-events: none;
+}
+
+#canvas-wrapper {
+  position: relative;
+  box-shadow: 0 20px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
+  transition: transform 0.2s;
+}
+
+canvas {
+  display: block;
+}
+
+/* ─── EMPTY STATE ────────────────────────────────── */
+#empty-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  gap: 12px;
+}
+
+#empty-state .es-icon {
+  font-size: 48px;
+  opacity: 0.12;
+}
+
+#empty-state .es-text {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dimmer);
+}
+
+/* ─── PROCESSING OVERLAY ─────────────────────────── */
+#processing-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(26,23,20,0.85);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 12px;
+  z-index: 50;
+  backdrop-filter: blur(2px);
+}
+
+#processing-overlay.show { display: flex; }
+
+.proc-spinner {
+  width: 32px;
+  height: 32px;
+  border: 2px solid var(--border2);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.proc-text {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* ─── STATUS BAR ─────────────────────────────────── */
+#status-bar {
+  padding: 5px 20px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 20px;
+  background: var(--panel);
+  flex-shrink: 0;
+}
+
+.sb-item {
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--text-dimmer);
+  text-transform: uppercase;
+  font-family: 'Barlow Condensed', sans-serif;
+}
+
+.sb-item span { color: var(--text-dim); }
+
+/* ─── CUSTOM HEX INPUT ───────────────────────────── */
+.hex-input-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  padding: 4px 6px;
+  background: var(--panel2);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.hex-swatch-preview {
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
+  border: 1px solid rgba(0,0,0,0.3);
+  flex-shrink: 0;
+}
+
+.hex-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-family: 'Courier Prime', monospace;
+  font-size: 10px;
+  color: var(--text);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.hex-set-btn {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  color: var(--accent2);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-transform: uppercase;
+  padding: 0 2px;
+}
+
+/* ─── DENSITY TOGGLE ─────────────────────────────── */
+.density-mode {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.dm-btn {
+  flex: 1;
+  padding: 5px 4px;
+  background: var(--panel2);
+  border: 1px solid var(--border2);
+  border-radius: 3px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  cursor: pointer;
+  text-align: center;
+  transition: all 0.15s;
+}
+
+.dm-btn.active { background: rgba(240,192,64,0.1); border-color: var(--accent2); color: var(--accent2); }
+
+/* ─── DIVIDER ────────────────────────────────────── */
+.rule { height: 1px; background: var(--border); margin: 8px 0; }
+
+/* ─── VIDEO BADGE ────────────────────────────────── */
+.badge {
+  display: inline-block;
+  padding: 2px 5px;
+  background: rgba(240,192,64,0.15);
+  border: 1px solid var(--accent2);
+  border-radius: 2px;
+  font-size: 8px;
+  letter-spacing: 0.1em;
+  color: var(--accent2);
+  text-transform: uppercase;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+}
+</style>
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ══ CONTROL PANEL ══════════════════════════════════ -->
+  <div id="panel">
+    <div id="panel-header">
+      <div class="logo"><span>RISO</span>GRAPH</div>
+      <div class="subtitle">Spot Color Emulator v1.0</div>
+    </div>
+
+    <div id="panel-scroll">
+
+      <!-- UPLOAD -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Source</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div id="upload-zone" onclick="document.getElementById('file-input').click()"
+               ondragover="handleDragOver(event)" ondrop="handleDrop(event)" ondragleave="handleDragLeave(event)">
+            <span class="uz-icon">⊞</span>
+            <span class="uz-text">Upload Image or Video</span>
+            <span class="uz-hint">PNG · JPG · GIF · MP4 · WEBM · drag & drop</span>
+          </div>
+          <input type="file" id="file-input" accept="image/*,video/*" onchange="handleFileInput(event)">
+          <div class="toggle-row" style="margin-top:8px">
+            <span class="toggle-label">Low Quality Preview (Video)</span>
+            <div class="toggle" id="toggle-lowq" onclick="toggleSwitch(this, 'lowQuality')"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- SPOT COLORS -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Spot Colors</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="color-count-row">
+            <span class="cc-label">Channels</span>
+            <div class="count-btns" id="count-btns">
+              <button class="count-btn" onclick="setColorCount(2)">2</button>
+              <button class="count-btn active" onclick="setColorCount(3)">3</button>
+              <button class="count-btn" onclick="setColorCount(4)">4</button>
+              <button class="count-btn" onclick="setColorCount(5)">5</button>
+            </div>
+          </div>
+          <div id="color-channels"></div>
+          <div class="hex-input-row" style="margin-top:8px">
+            <div class="hex-swatch-preview" id="hex-preview" style="background:#FF48B0"></div>
+            <input class="hex-input" type="text" id="hex-input" value="FF48B0" maxlength="6"
+                   placeholder="HEX/PANTONE" oninput="updateHexPreview(this)">
+            <button class="hex-set-btn" onclick="applyHex()">SET</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- FUSION -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Fusion Mode</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="param-row">
+            <span class="param-label">Blend</span>
+            <select class="riso-select" id="blend-mode" onchange="updateParam('blendMode', this.value)">
+              <option value="multiply">Multiply</option>
+              <option value="darken">Darken</option>
+              <option value="screen">Screen</option>
+              <option value="overlay">Overlay</option>
+              <option value="hard-light">Hard Light</option>
+              <option value="color-burn">Color Burn</option>
+              <option value="luminosity">Luminosity</option>
+            </select>
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Global Opacity</span>
+              <span class="sl-value" id="val-opacity">85%</span>
+            </div>
+            <input class="riso-slider" type="range" min="20" max="100" value="85"
+                   oninput="sliderUpdate('opacity', this.value, '%')">
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Tint Opacity</span>
+              <span class="sl-value" id="val-tint">70%</span>
+            </div>
+            <input class="riso-slider" type="range" min="10" max="100" value="70"
+                   oninput="sliderUpdate('tint', this.value, '%')">
+          </div>
+        </div>
+      </div>
+
+      <!-- DENSITY -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Density</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="density-mode">
+            <div class="dm-btn active" id="dm-auto" onclick="setDensityMode('auto')">Auto LPI</div>
+            <div class="dm-btn" id="dm-manual" onclick="setDensityMode('manual')">Manual</div>
+          </div>
+          <div id="density-manual-row" class="slider-row" style="display:none">
+            <div class="slider-meta">
+              <span class="sl-label">LPI</span>
+              <span class="sl-value" id="val-lpi">65</span>
+            </div>
+            <input class="riso-slider" type="range" min="30" max="100" value="65"
+                   oninput="sliderUpdate('lpi', this.value, '')">
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Dot Size</span>
+              <span class="sl-value" id="val-dotsize">50%</span>
+            </div>
+            <input class="riso-slider" type="range" min="10" max="100" value="50"
+                   oninput="sliderUpdate('dotsize', this.value, '%')">
+          </div>
+        </div>
+      </div>
+
+      <!-- PATTERN -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Pattern Texture</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="chip-row" id="pattern-chips">
+            <div class="chip active" onclick="selectChip(this,'pattern','stochastic')">Stochastic</div>
+            <div class="chip" onclick="selectChip(this,'pattern','diffusion')">Diffusion</div>
+            <div class="chip" onclick="selectChip(this,'pattern','line')">Line</div>
+            <div class="chip" onclick="selectChip(this,'pattern','dot')">Dot</div>
+            <div class="chip" onclick="selectChip(this,'pattern','crosshatch')">Cross Hatch</div>
+          </div>
+          <div class="param-row">
+            <span class="param-label">Angle</span>
+            <select class="riso-select" id="halftone-angle" onchange="updateParam('halftoneAngle', this.value)">
+              <option value="0">0°</option>
+              <option value="15">15°</option>
+              <option value="45" selected>45°</option>
+              <option value="75">75°</option>
+              <option value="90">90°</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- MISREGISTRATION -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Misregistration</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div id="misreg-pad-wrap">
+            <div id="misreg-pad" onmousedown="startMisregDrag(event)" ontouchstart="startMisregTouch(event)">
+              <div id="misreg-dot"></div>
+            </div>
+            <div class="misreg-vals">
+              <div class="misreg-val"><span>X Offset</span><span id="misreg-x-val">0px</span></div>
+              <div class="misreg-val"><span>Y Offset</span><span id="misreg-y-val">0px</span></div>
+              <div class="misreg-val" style="margin-top:6px; font-size:8px; color:var(--text-dimmer); letter-spacing:0.08em">Drag to offset</div>
+            </div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Ink Bleed</span>
+              <span class="sl-value" id="val-bleed">20%</span>
+            </div>
+            <input class="riso-slider" type="range" min="0" max="100" value="20"
+                   oninput="sliderUpdate('bleed', this.value, '%')">
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Over-inking</span>
+              <span class="sl-value" id="val-overink">15%</span>
+            </div>
+            <input class="riso-slider" type="range" min="0" max="100" value="15"
+                   oninput="sliderUpdate('overink', this.value, '%')">
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Paper Grain</span>
+              <span class="sl-value" id="val-grain">30%</span>
+            </div>
+            <input class="riso-slider" type="range" min="0" max="100" value="30"
+                   oninput="sliderUpdate('grain', this.value, '%')">
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Scanner Artifact</span>
+              <span class="sl-value" id="val-scanner">10%</span>
+            </div>
+            <input class="riso-slider" type="range" min="0" max="100" value="10"
+                   oninput="sliderUpdate('scanner', this.value, '%')">
+          </div>
+        </div>
+      </div>
+
+      <!-- PAPER -->
+      <div class="section">
+        <div class="section-header" onclick="toggleSection(this)">
+          <span class="s-title">Paper Texture</span>
+          <span class="s-arrow">▼</span>
+        </div>
+        <div class="section-body">
+          <div class="chip-row" id="paper-chips">
+            <div class="chip active" onclick="selectChip(this,'paper','white')">Uncoated White</div>
+            <div class="chip" onclick="selectChip(this,'paper','cream')">Cream Off-White</div>
+            <div class="chip" onclick="selectChip(this,'paper','kraft')">Kraft / Recycled</div>
+            <div class="chip" onclick="selectChip(this,'paper','rough')">Rough Textured</div>
+          </div>
+          <div class="slider-row">
+            <div class="slider-meta">
+              <span class="sl-label">Texture Amount</span>
+              <span class="sl-value" id="val-paper-amount">40%</span>
+            </div>
+            <input class="riso-slider" type="range" min="0" max="100" value="40"
+                   oninput="sliderUpdate('paperAmount', this.value, '%')">
+          </div>
+        </div>
+      </div>
+
+    </div><!-- end scroll -->
+
+    <div id="panel-actions">
+      <button class="btn-process" onclick="processImage()">▶ PRINT</button>
+      <button class="btn-export" onclick="exportImage()">EXPORT</button>
+    </div>
+  </div><!-- end panel -->
+
+  <!-- ══ CANVAS AREA ═══════════════════════════════════ -->
+  <div id="canvas-area">
+    <div id="canvas-toolbar">
+      <span class="ct-info" id="ct-filename">NO FILE LOADED</span>
+      <div class="ct-sep"></div>
+      <span class="ct-info" id="ct-dims">— × —</span>
+      <div class="ct-sep"></div>
+      <span class="ct-info" id="ct-channels">— CHANNELS</span>
+      <div class="zoom-btns">
+        <button class="zoom-btn" onclick="zoom(-0.25)" title="Zoom out">−</button>
+        <button class="zoom-btn" onclick="resetZoom()" title="Reset zoom" style="font-size:9px;letter-spacing:.08em;font-family:'Barlow Condensed',sans-serif;font-weight:700;width:36px">FIT</button>
+        <button class="zoom-btn" onclick="zoom(0.25)" title="Zoom in">+</button>
+      </div>
+    </div>
+
+    <div id="canvas-container">
+      <div id="empty-state">
+        <div class="es-icon">◫</div>
+        <div class="es-text">Upload an image to begin</div>
+      </div>
+      <div id="canvas-wrapper" style="display:none">
+        <canvas id="main-canvas"></canvas>
+      </div>
+    </div>
+
+    <div id="processing-overlay">
+      <div class="proc-spinner"></div>
+      <div class="proc-text">Processing…</div>
+    </div>
+
+    <div id="status-bar">
+      <span class="sb-item">Pattern: <span id="sb-pattern">Stochastic</span></span>
+      <span class="sb-item">Paper: <span id="sb-paper">Uncoated White</span></span>
+      <span class="sb-item">Blend: <span id="sb-blend">Multiply</span></span>
+      <span class="sb-item">LPI: <span id="sb-lpi">Auto</span></span>
+      <span class="sb-item" style="margin-left:auto" id="sb-status">Ready</span>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════════════
+const RISO_COLORS = [
+  { name: 'Fluor. Pink',  hex: '#FF48B0' },
+  { name: 'Bright Red',   hex: '#F15060' },
+  { name: 'Blue',         hex: '#3255A4' },
+  { name: 'Medium Blue',  hex: '#4D80C8' },
+  { name: 'Yellow',       hex: '#FFE800' },
+  { name: 'Teal',         hex: '#00A99D' },
+  { name: 'Kelly Green',  hex: '#56A149' },
+  { name: 'Purple',       hex: '#7B5EA7' },
+  { name: 'Black',        hex: '#212121' },
+  { name: 'Custom',       hex: null      },
+];
+
+const PAPER_COLORS = {
+  white: '#F5F2EC',
+  cream: '#F2E8CF',
+  kraft: '#C4A87A',
+  rough: '#E8DEC8',
+};
+
+let state = {
+  file: null,
+  fileType: 'image', // or 'video'
+  lowQuality: false,
+  colorCount: 3,
+  colors: ['#FF48B0', '#3255A4', '#FFE800'],
+  opacities: [1.0, 0.9, 0.85],
+  blendMode: 'multiply',
+  opacity: 85,
+  tint: 70,
+  densityMode: 'auto',
+  lpi: 65,
+  dotsize: 50,
+  pattern: 'stochastic',
+  halftoneAngle: 45,
+  misregX: 0,
+  misregY: 0,
+  bleed: 20,
+  overink: 15,
+  grain: 30,
+  scanner: 10,
+  paper: 'white',
+  paperAmount: 40,
+  zoom: 1.0,
+  sourceImage: null,
+  videoEl: null,
+};
+
+// ══════════════════════════════════════════════════════
+//  INIT COLOR CHANNELS
+// ══════════════════════════════════════════════════════
+function buildColorChannels() {
+  const container = document.getElementById('color-channels');
+  container.innerHTML = '';
+  for (let i = 0; i < state.colorCount; i++) {
+    const color = state.colors[i] || '#212121';
+    const colorName = RISO_COLORS.find(c => c.hex === color)?.name || 'Custom';
+    const ch = document.createElement('div');
+    ch.className = 'channel';
+    ch.innerHTML = `
+      <div class="channel-swatch" style="background:${color}" onclick="toggleDropdown(${i})"></div>
+      <div class="channel-name" onclick="toggleDropdown(${i})">${colorName}</div>
+      <input class="channel-opacity" type="range" min="10" max="100" value="${Math.round((state.opacities[i]||0.9)*100)}"
+             oninput="updateChannelOpacity(${i}, this.value)" title="Opacity">
+      <div class="channel-dropdown" id="ch-dd-${i}">
+        ${RISO_COLORS.map((c, ci) => `
+          <div class="color-option ${c.hex===color?'selected':''}"
+               style="background:${c.hex||'conic-gradient(red,orange,yellow,green,blue,violet,red)'}"
+               title="${c.name}" onclick="selectChannelColor(${i}, '${c.hex||'custom'}', '${c.name}')"></div>
+        `).join('')}
+      </div>
+    `;
+    container.appendChild(ch);
+  }
+  updateCountBtns();
+  document.getElementById('ct-channels').textContent = state.colorCount + ' CHANNELS';
+}
+
+function toggleDropdown(i) {
+  const dd = document.getElementById('ch-dd-'+i);
+  const wasOpen = dd.classList.contains('open');
+  document.querySelectorAll('.channel-dropdown').forEach(d => d.classList.remove('open'));
+  if (!wasOpen) dd.classList.add('open');
+}
+
+document.addEventListener('click', e => {
+  if (!e.target.closest('.channel')) {
+    document.querySelectorAll('.channel-dropdown').forEach(d => d.classList.remove('open'));
+  }
+});
+
+function selectChannelColor(i, hex, name) {
+  if (hex === 'custom') {
+    // Use hex input value
+    const hv = document.getElementById('hex-input').value;
+    state.colors[i] = '#' + hv.replace('#','');
+  } else {
+    state.colors[i] = hex;
+  }
+  buildColorChannels();
+  if (state.sourceImage) autoProcess();
+}
+
+function updateChannelOpacity(i, val) {
+  state.opacities[i] = val / 100;
+}
+
+function setColorCount(n) {
+  state.colorCount = n;
+  while (state.colors.length < n) state.colors.push('#212121');
+  while (state.opacities.length < n) state.opacities.push(0.9);
+  buildColorChannels();
+}
+
+function updateCountBtns() {
+  document.querySelectorAll('#count-btns .count-btn').forEach(btn => {
+    btn.classList.toggle('active', parseInt(btn.textContent) === state.colorCount);
+  });
+}
+
+// ══════════════════════════════════════════════════════
+//  CONTROLS
+// ══════════════════════════════════════════════════════
+function toggleSection(header) {
+  header.classList.toggle('collapsed');
+  const body = header.nextElementSibling;
+  body.classList.toggle('hidden');
+}
+
+function toggleSwitch(el, key) {
+  el.classList.toggle('on');
+  state[key] = el.classList.contains('on');
+}
+
+function updateParam(key, val) {
+  state[key] = val;
+  if (key === 'blendMode') {
+    document.getElementById('sb-blend').textContent = document.getElementById('blend-mode').options[document.getElementById('blend-mode').selectedIndex].text;
+  }
+  if (state.sourceImage) autoProcess();
+}
+
+function sliderUpdate(key, val, unit) {
+  state[key] = parseFloat(val);
+  const el = document.getElementById('val-' + key);
+  if (el) el.textContent = val + unit;
+  if (key === 'lpi') document.getElementById('sb-lpi').textContent = val;
+  if (state.sourceImage) scheduleProcess();
+}
+
+let processTimer = null;
+function scheduleProcess() {
+  clearTimeout(processTimer);
+  processTimer = setTimeout(() => { if (state.sourceImage) processImage(); }, 300);
+}
+
+function autoProcess() {
+  if (state.sourceImage) scheduleProcess();
+}
+
+function selectChip(el, group, val) {
+  const container = el.parentElement;
+  container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  state[group] = val;
+  if (group === 'pattern') document.getElementById('sb-pattern').textContent = el.textContent;
+  if (group === 'paper') document.getElementById('sb-paper').textContent = el.textContent;
+  if (state.sourceImage) scheduleProcess();
+}
+
+function setDensityMode(mode) {
+  state.densityMode = mode;
+  document.getElementById('dm-auto').classList.toggle('active', mode === 'auto');
+  document.getElementById('dm-manual').classList.toggle('active', mode === 'manual');
+  document.getElementById('density-manual-row').style.display = mode === 'manual' ? '' : 'none';
+  const lpi = mode === 'auto' ? 'Auto' : state.lpi;
+  document.getElementById('sb-lpi').textContent = lpi;
+  if (state.sourceImage) scheduleProcess();
+}
+
+function updateHexPreview(input) {
+  const hex = '#' + input.value.replace('#','').padEnd(6,'0');
+  document.getElementById('hex-preview').style.background = hex;
+}
+
+function applyHex() {
+  const hex = '#' + document.getElementById('hex-input').value.replace('#','');
+  // Apply to first selected channel or use as custom
+  if (state.colorCount > 0) {
+    state.colors[0] = hex;
+    buildColorChannels();
+    if (state.sourceImage) scheduleProcess();
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  UPLOAD / FILE
+// ══════════════════════════════════════════════════════
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.add('drag-over');
+}
+function handleDragLeave(e) {
+  document.getElementById('upload-zone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('upload-zone').classList.remove('drag-over');
+  const file = e.dataTransfer.files[0];
+  if (file) loadFile(file);
+}
+function handleFileInput(e) {
+  const file = e.target.files[0];
+  if (file) loadFile(file);
+}
+
+function loadFile(file) {
+  state.file = file;
+  document.getElementById('ct-filename').textContent = file.name.toUpperCase();
+  const isVideo = file.type.startsWith('video/');
+  state.fileType = isVideo ? 'video' : 'image';
+
+  if (isVideo) {
+    loadVideo(file);
+  } else {
+    loadImageFile(file);
+  }
+}
+
+function loadImageFile(file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const img = new Image();
+    img.onload = () => {
+      state.sourceImage = img;
+      document.getElementById('ct-dims').textContent = img.width + ' × ' + img.height;
+      showCanvas(img.width, img.height);
+      processImage();
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function loadVideo(file) {
+  if (state.videoEl) {
+    state.videoEl.pause();
+    state.videoEl.src = '';
+  }
+  const video = document.createElement('video');
+  video.muted = true;
+  video.loop = true;
+  video.playsInline = true;
+  video.src = URL.createObjectURL(file);
+  video.onloadeddata = () => {
+    video.currentTime = 0;
+    video.play();
+    state.videoEl = video;
+    state.sourceImage = video;
+    const w = state.lowQuality ? Math.floor(video.videoWidth * 0.5) : video.videoWidth;
+    const h = state.lowQuality ? Math.floor(video.videoHeight * 0.5) : video.videoHeight;
+    document.getElementById('ct-dims').textContent = video.videoWidth + ' × ' + video.videoHeight;
+    showCanvas(video.videoWidth, video.videoHeight);
+    processImage();
+    // animate
+    const animate = () => {
+      if (state.videoEl === video) {
+        processImage();
+        requestAnimationFrame(animate);
+      }
+    };
+    animate();
+  };
+}
+
+function showCanvas(w, h) {
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('canvas-wrapper').style.display = '';
+  const canvas = document.getElementById('main-canvas');
+  canvas.width = w;
+  canvas.height = h;
+  resetZoom();
+}
+
+// ══════════════════════════════════════════════════════
+//  CORE RISO PROCESSING
+// ══════════════════════════════════════════════════════
+function processImage() {
+  if (!state.sourceImage) return;
+  const canvas = document.getElementById('main-canvas');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+
+  // Paper background
+  const paperCol = PAPER_COLORS[state.paper] || '#F5F2EC';
+  ctx.fillStyle = paperCol;
+  ctx.fillRect(0, 0, W, H);
+
+  // Paper texture
+  if (state.paperAmount > 0) {
+    applyPaperTexture(ctx, W, H, state.paper, state.paperAmount / 100);
+  }
+
+  // Get source pixels
+  const src = document.createElement('canvas');
+  src.width = W;
+  src.height = H;
+  const sctx = src.getContext('2d');
+  sctx.drawImage(state.sourceImage, 0, 0, W, H);
+  const srcData = sctx.getImageData(0, 0, W, H);
+
+  const lpi = state.densityMode === 'auto' ? Math.round(60 + (Math.min(W,H)/20)) : state.lpi;
+
+  // Render each color channel
+  for (let c = 0; c < state.colorCount; c++) {
+    const col = hexToRgb(state.colors[c] || '#212121');
+    const chOp = state.opacities[c] !== undefined ? state.opacities[c] : 0.9;
+    const offX = c === 0 ? 0 : Math.round(state.misregX * (c * 0.7));
+    const offY = c === 0 ? 0 : Math.round(state.misregY * (c * 0.7));
+
+    const chCanvas = document.createElement('canvas');
+    chCanvas.width = W;
+    chCanvas.height = H;
+    const cctx = chCanvas.getContext('2d');
+
+    renderChannel(cctx, srcData, col, c, state.colorCount, W, H, lpi, offX, offY);
+
+    // Over-inking effect
+    if (state.overink > 0) {
+      applyOverInk(cctx, W, H, state.overink / 100, col);
+    }
+
+    // Ink bleed
+    if (state.bleed > 0) {
+      applyBleed(cctx, W, H, state.bleed / 100);
+    }
+
+    ctx.save();
+    ctx.globalCompositeOperation = state.blendMode;
+    ctx.globalAlpha = chOp * (state.opacity / 100);
+    ctx.drawImage(chCanvas, 0, 0);
+    ctx.restore();
+  }
+
+  // Grain
+  if (state.grain > 0) {
+    applyGrain(ctx, W, H, state.grain / 100);
+  }
+
+  // Scanner artifacts
+  if (state.scanner > 0) {
+    applyScannerArtifacts(ctx, W, H, state.scanner / 100);
+  }
+
+  document.getElementById('sb-status').textContent = 'Processed';
+}
+
+function renderChannel(ctx, srcData, color, channelIdx, totalChannels, W, H, lpi, offX, offY) {
+  const cells = Math.round(lpi * (state.dotsize / 100));
+  const cellSize = Math.max(2, Math.floor(Math.min(W, H) / cells));
+  const angle = (state.halftoneAngle * Math.PI) / 180;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Extract luminance for this channel's portion
+  const hueRange = 360 / totalChannels;
+  const targetHue = (channelIdx / totalChannels) * 360;
+
+  if (state.pattern === 'stochastic') {
+    renderStochastic(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, offX, offY);
+  } else if (state.pattern === 'dot') {
+    renderDotHalftone(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, angle, offX, offY, false);
+  } else if (state.pattern === 'line') {
+    renderLineHalftone(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, angle, offX, offY);
+  } else if (state.pattern === 'crosshatch') {
+    renderCrosshatch(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, angle, offX, offY);
+  } else if (state.pattern === 'diffusion') {
+    renderDiffusion(ctx, srcData, color, channelIdx, totalChannels, W, H, offX, offY);
+  }
+}
+
+function getChannelLuminance(srcData, channelIdx, totalChannels, W, H) {
+  // Separate image into color bands
+  const lum = new Float32Array(W * H);
+  const d = srcData.data;
+  for (let i = 0; i < W * H; i++) {
+    const r = d[i*4]/255, g = d[i*4+1]/255, b = d[i*4+2]/255;
+    // Each channel takes a different weight
+    let v;
+    if (channelIdx === 0) v = r;
+    else if (channelIdx === 1) v = g;
+    else if (channelIdx === 2) v = b;
+    else v = (r + g + b) / 3;
+    lum[i] = 1 - v; // invert for ink density
+  }
+  return lum;
+}
+
+function renderStochastic(ctx, srcData, color, chIdx, total, W, H, cellSize, offX, offY) {
+  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+  ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+
+  for (let y = 0; y < H; y += 2) {
+    for (let x = 0; x < W; x += 2) {
+      const sx = Math.max(0, Math.min(W-1, x + offX));
+      const sy = Math.max(0, Math.min(H-1, y + offY));
+      const density = lum[sy * W + sx];
+      if (Math.random() < density * 0.9) {
+        const dotR = 0.8 + Math.random() * 1.2;
+        ctx.beginPath();
+        ctx.arc(x + Math.random()*2, y + Math.random()*2, dotR, 0, Math.PI*2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function renderDotHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
+  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+  ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
+  const cs = Math.max(4, cellSize);
+
+  for (let cy = -cs; cy < H + cs; cy += cs) {
+    for (let cx = -cs; cx < W + cs; cx += cs) {
+      const rx = cx * Math.cos(angle) - cy * Math.sin(angle);
+      const ry = cx * Math.sin(angle) + cy * Math.cos(angle);
+      const px = Math.round(rx + offX);
+      const py = Math.round(ry + offY);
+      if (px < 0 || px >= W || py < 0 || py >= H) continue;
+      const density = lum[py * W + px];
+      const radius = (cs / 2) * Math.sqrt(density);
+      if (radius > 0.3) {
+        ctx.beginPath();
+        ctx.arc(rx, ry, radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+  }
+}
+
+function renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
+  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+  ctx.strokeStyle = `rgb(${color.r},${color.g},${color.b})`;
+  const spacing = Math.max(3, cellSize);
+
+  for (let i = -Math.max(W,H); i < Math.max(W,H)*2; i += spacing) {
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+    const x0 = i * cosA - (-Math.max(W,H)) * sinA;
+    const y0 = i * sinA + (-Math.max(W,H)) * cosA;
+    const x1 = i * cosA - (Math.max(W,H)*2) * sinA;
+    const y1 = i * sinA + (Math.max(W,H)*2) * cosA;
+
+    // Sample density along the line
+    const midX = Math.round(x0/2+x1/2 + offX);
+    const midY = Math.round(y0/2+y1/2 + offY);
+    const cX = Math.max(0, Math.min(W-1, midX));
+    const cY = Math.max(0, Math.min(H-1, midY));
+    const density = lum[cY * W + cX];
+    const lineW = spacing * 0.9 * density;
+
+    if (lineW > 0.2) {
+      ctx.lineWidth = lineW;
+      ctx.beginPath();
+      ctx.moveTo(x0, y0);
+      ctx.lineTo(x1, y1);
+      ctx.stroke();
+    }
+  }
+}
+
+function renderCrosshatch(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
+  // Two passes at perpendicular angles
+  renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY);
+  ctx.globalAlpha = 0.5;
+  renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle + Math.PI/2, offX, offY);
+  ctx.globalAlpha = 1;
+}
+
+function renderDiffusion(ctx, srcData, color, chIdx, total, W, H, offX, offY) {
+  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+  const imgData = ctx.createImageData(W, H);
+  const d = imgData.data;
+  const err = new Float32Array(W * H);
+
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const sx = Math.max(0, Math.min(W-1, x + offX));
+      const sy = Math.max(0, Math.min(H-1, y + offY));
+      const i = y * W + x;
+      const old = lum[sy*W+sx] + err[i];
+      const nv = old > 0.5 ? 1 : 0;
+      const e = old - nv;
+      if (x+1 < W) err[i+1] += e * 7/16;
+      if (x-1 >= 0 && y+1 < H) err[i+W-1] += e * 3/16;
+      if (y+1 < H) err[i+W] += e * 5/16;
+      if (x+1 < W && y+1 < H) err[i+W+1] += e * 1/16;
+      if (nv > 0) {
+        const di = (y*W+x)*4;
+        d[di] = color.r; d[di+1] = color.g; d[di+2] = color.b; d[di+3] = 255;
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+function applyPaperTexture(ctx, W, H, paperType, amount) {
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const scale = amount * 30;
+  for (let i = 0; i < d.length; i += 4) {
+    if (paperType === 'kraft') {
+      const noise = (Math.random() - 0.5) * scale * 2;
+      d[i] = clamp(d[i] + noise); d[i+1] = clamp(d[i+1] + noise * 0.6); d[i+2] = clamp(d[i+2] + noise * 0.3);
+    } else {
+      const noise = (Math.random() - 0.5) * scale;
+      d[i] = clamp(d[i]+noise); d[i+1] = clamp(d[i+1]+noise); d[i+2] = clamp(d[i+2]+noise);
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function applyGrain(ctx, W, H, amount) {
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const scale = amount * 40;
+  for (let i = 0; i < d.length; i += 4) {
+    const noise = (Math.random() - 0.5) * scale;
+    d[i] = clamp(d[i]+noise); d[i+1] = clamp(d[i+1]+noise); d[i+2] = clamp(d[i+2]+noise);
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function applyOverInk(ctx, W, H, amount, color) {
+  const imageData = ctx.getImageData(0, 0, W, H);
+  const d = imageData.data;
+  const spread = Math.max(1, Math.round(amount * 3));
+  for (let i = 0; i < d.length; i += 4) {
+    if (d[i+3] > 0 && Math.random() < amount * 0.3) {
+      // Spread ink randomly
+      d[i] = clamp(d[i] - Math.random() * 20);
+      d[i+1] = clamp(d[i+1] - Math.random() * 20);
+      d[i+2] = clamp(d[i+2] - Math.random() * 20);
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+}
+
+function applyBleed(ctx, W, H, amount) {
+  if (amount < 0.05) return;
+  ctx.save();
+  ctx.filter = `blur(${amount * 2}px)`;
+  const tmp = document.createElement('canvas');
+  tmp.width = W; tmp.height = H;
+  const tctx = tmp.getContext('2d');
+  tctx.drawImage(ctx.canvas, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(tmp, 0, 0);
+  ctx.restore();
+}
+
+function applyScannerArtifacts(ctx, W, H, amount) {
+  if (amount < 0.05) return;
+  // Horizontal scan lines
+  ctx.save();
+  ctx.globalAlpha = amount * 0.15;
+  const lineCount = Math.round(amount * 5);
+  for (let i = 0; i < lineCount; i++) {
+    const y = Math.random() * H;
+    const thickness = 1 + Math.random() * 2;
+    ctx.fillStyle = Math.random() > 0.5 ? 'white' : 'black';
+    ctx.fillRect(0, y, W, thickness);
+  }
+  // Slight skew
+  if (amount > 0.3) {
+    ctx.globalAlpha = amount * 0.1;
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.drawImage(ctx.canvas, Math.random()*4 - 2, 0);
+  }
+  ctx.restore();
+}
+
+// ══════════════════════════════════════════════════════
+//  MISREGISTRATION PAD
+// ══════════════════════════════════════════════════════
+let misregDragging = false;
+
+function startMisregDrag(e) {
+  misregDragging = true;
+  updateMisreg(e);
+  document.addEventListener('mousemove', onMisregMove);
+  document.addEventListener('mouseup', () => {
+    misregDragging = false;
+    document.removeEventListener('mousemove', onMisregMove);
+  }, { once: true });
+}
+
+function startMisregTouch(e) {
+  e.preventDefault();
+  updateMisregFromTouch(e.touches[0]);
+  document.addEventListener('touchmove', onMisregTouchMove, { passive: false });
+  document.addEventListener('touchend', () => {
+    document.removeEventListener('touchmove', onMisregTouchMove);
+  }, { once: true });
+}
+
+function onMisregMove(e) { if (misregDragging) updateMisreg(e); }
+function onMisregTouchMove(e) { e.preventDefault(); updateMisregFromTouch(e.touches[0]); }
+
+function updateMisreg(e) {
+  const pad = document.getElementById('misreg-pad');
+  const rect = pad.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, e.clientX - rect.left));
+  const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
+  setMisregPos(x, y, rect.width, rect.height);
+}
+
+function updateMisregFromTouch(touch) {
+  const pad = document.getElementById('misreg-pad');
+  const rect = pad.getBoundingClientRect();
+  const x = Math.max(0, Math.min(rect.width, touch.clientX - rect.left));
+  const y = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
+  setMisregPos(x, y, rect.width, rect.height);
+}
+
+function setMisregPos(x, y, w, h) {
+  const dot = document.getElementById('misreg-dot');
+  dot.style.left = x + 'px';
+  dot.style.top = y + 'px';
+  state.misregX = Math.round((x / w - 0.5) * 20);
+  state.misregY = Math.round((y / h - 0.5) * 20);
+  document.getElementById('misreg-x-val').textContent = (state.misregX >= 0 ? '+' : '') + state.misregX + 'px';
+  document.getElementById('misreg-y-val').textContent = (state.misregY >= 0 ? '+' : '') + state.misregY + 'px';
+  if (state.sourceImage) scheduleProcess();
+}
+
+// ══════════════════════════════════════════════════════
+//  ZOOM
+// ══════════════════════════════════════════════════════
+function zoom(delta) {
+  state.zoom = Math.max(0.1, Math.min(4, state.zoom + delta));
+  applyZoom();
+}
+
+function resetZoom() {
+  const container = document.getElementById('canvas-container');
+  const canvas = document.getElementById('main-canvas');
+  if (!canvas.width) { state.zoom = 1; applyZoom(); return; }
+  const fw = (container.clientWidth - 80) / canvas.width;
+  const fh = (container.clientHeight - 80) / canvas.height;
+  state.zoom = Math.min(1, Math.min(fw, fh));
+  applyZoom();
+}
+
+function applyZoom() {
+  document.getElementById('canvas-wrapper').style.transform = `scale(${state.zoom})`;
+  document.getElementById('canvas-wrapper').style.transformOrigin = 'center center';
+}
+
+// ══════════════════════════════════════════════════════
+//  EXPORT
+// ══════════════════════════════════════════════════════
+function exportImage() {
+  const canvas = document.getElementById('main-canvas');
+  if (!canvas.width) return;
+  const link = document.createElement('a');
+  link.download = 'risograph_export.png';
+  link.href = canvas.toDataURL('image/png');
+  link.click();
+}
+
+// ══════════════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════════════
+function hexToRgb(hex) {
+  hex = hex.replace('#','');
+  if (hex.length === 3) hex = hex.split('').map(c=>c+c).join('');
+  const n = parseInt(hex, 16);
+  return { r: (n>>16)&255, g: (n>>8)&255, b: n&255 };
+}
+
+function clamp(v) { return Math.max(0, Math.min(255, v)); }
+
+// ══════════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════════
+buildColorChannels();
+document.getElementById('sb-blend').textContent = 'Multiply';
+</script>
+</body>
+</html>

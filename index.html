@@ -1,155 +1,3 @@
-
-Claude finished the response
-I'm building a graphic tool that recreates risograph effect. Create a single-page html file. There should be a control panel on the left and preview area (canvas) on the right.
-Here is a reference for the behaviour and look I want to achieve, but basically is a risograph printing machine
-Flow:
-User upload an image or video via 'Upload button' (Add low quality preview for video option switch).
-﻿﻿﻿Image gets processed and the result gets displayed at the centre of the canvas.
-﻿﻿﻿User can control the parameters of the visual via controls.
-Graphic principles:
-Spot Colors choose from 2 to 5 (so you can select different colours Fluorescent Pink, Bright Red, Blue, Medium Blue, Yellow, Teal, Kelly Green, Purple, Black)  also add a HEX PANTONE select for personal
-Fusion mode(multiply, darken, screen, overlay, custom opacity, 
-Density (Automatic LPI or Manual with a slider from 30 to 100)
-Pattern texture (stochastic, diffusion, line, dot, cross hatch ) 
-Misregistration: X/Y sector with a dot that you can move in the position,  ink bleed /over inking, Paper grain noise , Scanner artefacts
-Tint Opacity 
-Paper texture: uncoated white, cream off-white, Kraft /recycled, Rough textured (with amount selector from 0 to 100)
-
-Show more
-14:33
-
-Reading frontend design skill
-Reading frontend design skill
-Now I'll build this. Let me plan the design direction first: industrial/utilitarian meets analog warmth — like a real riso print shop interface. Dark background, ink-stained aesthetic, monospaced + condensed slab fonts, color swatches that feel tactile, controls that feel like dials on a printing press.
-
-
-Created a file, read a file
-Created a file, read a file
-Here's your RISOGRAPH emulator. Here's what's packed in:
-
-Color Engine
-
-2–5 spot color channels, each with its own opacity slider and color picker (all 9 Riso inks + custom HEX input)
-Channels are separated by RGB components then halftone-rendered independently
-Halftone Patterns
-
-Stochastic — random noise grain, true to riso's organic feel
-Dot — classic circular halftone with angle control
-Line — ruled line screens
-Cross Hatch — dual-angle line overlay
-Diffusion — Floyd-Steinberg dithering for sharp graphic look
-Misregistration — XY pad you can drag; offset accumulates per channel (layer 2 shifts more than layer 1, just like real registration slip)
-
-Artifacts — Ink bleed (blur spread), over-inking (dot inflation), paper grain noise, scanner artifact lines
-
-Paper — Uncoated white, cream, kraft (warm-tinted noise), rough textured — all with amount slider
-
-Fusion — 7 blend modes + global and tint opacity
-
-Export — PNG via the Export button
-
-To test it, upload any photo — portraits and high-contrast images look especially striking. The processing happens automatically as you adjust sliders.
-
-
-Risograph
-Code · HTML 
-add on export jpg, png, mp4 (1080, 2k , 4k) options and also a reset button
-
-15:02
-
-Viewed 6 files
-Viewed 6 files
-Now I have a full picture. I'll replace the panel actions, add export modal CSS, and replace the export + add reset functions.
-
-
-Replace panel actions with new export + reset buttons
-Replace panel actions with new export + reset buttons
-Now add the CSS for the modal and reset button, and update the export/reset JS:
-
-
-Add export modal CSS and reset button CSS before closing style tag
-Add export modal CSS and reset button CSS before closing style tag
-Now replace the export function and add modal + reset JS:
-
-
-Replace export function and add full export modal + reset logic
-Replace export function and add full export modal + reset logic
-Also update the panel-actions CSS to accommodate the reset button:
-
-
-Edited a file, read a file
-Edited a file, read a file
-Here's what's new:
-
-Export Modal — click EXPORT ▾ to open a proper panel with:
-
-Format — PNG, JPG, or MP4 (MP4 is dimmed unless a video is loaded)
-Resolution — Source (original), 1080p, 2K, or 4K (aspect ratio is preserved)
-JPG Quality slider (appears only for JPG)
-MP4 options — duration slider (1–30s), FPS selector (24/30/60), uses browser's MediaRecorder API and exports as .webm (VP9) — a note explains this for compatibility
-Progress bar during video encoding
-Reset button (↺) — sits to the left of PRINT, resets all sliders, color channels, patterns, paper, misreg pad, and blend modes back to defaults with a confirmation prompt.
-
-
-Risograph
-Code · HTML 
-lastly could you create 5 or 6 presets of Riso, really cool looks of clasic riso prints so, just click and get something cool ?¿ find also names on how to define and also an option for save presets. Lastly the texture amount looks does not work, needs to work and also to go from 0 to 100
-
-15:07
-
-Viewed 7 files
-Viewed 7 files
-Now I have everything I need. Let me make all 3 changes at once: add presets section HTML + CSS, fix paper texture, add save preset logic.
-
-
-Add preset section CSS before closing style tag
-Add preset section CSS before closing style tag
-Now add the presets HTML section right after the upload section:
-
-
-Add presets section HTML after upload section
-Add presets section HTML after upload section
-That didn't change (same string). Let me find a unique anchor to insert presets section before Spot Colors:
-
-
-Insert presets section before spot colors
-Insert presets section before spot colors
-Now add the save preset modal HTML before the closing </div> of the app, and after the export modal. Find the closing app tag:
-
-
-Viewed 3 files
-Viewed 3 files
-Now I'll add the save preset modal HTML before the closing </div> of the app:
-
-
-Add save preset modal HTML before closing app div
-Add save preset modal HTML before closing app div
-Now fix the paper texture function and add presets + save preset JS. First fix applyPaperTexture:
-
-
-Fix applyPaperTexture to actually work with proper noise, grain patterns per paper type
-Fix applyPaperTexture to actually work with proper noise, grain patterns per paper type
-Now move paper texture to run AFTER inks (currently it runs before):
-
-
-Move paper texture to run after inks, scanner artifacts and grain
-Move paper texture to run after inks, scanner artifacts and grain
-Now add the presets data and functions before the INIT section:
-
-
-Add presets data and all preset/save functions before INIT
-Add presets data and all preset/save functions before INIT
-
-You are out of free messages until 7:30 PM
-
-
-
-
-Claude is AI and can make mistakes. Please double-check responses.
-
-
-raw
-Risograph · HTML
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -158,7 +6,7 @@ Risograph · HTML
 <title>RISO — Risograph Emulator</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@300;400;500;600;700;900&family=Courier+Prime:wght@400;700&display=swap');
- 
+
 :root {
   --bg: #1a1714;
   --panel: #221f1b;
@@ -171,7 +19,7 @@ Risograph · HTML
   --accent: #e84b3a;
   --accent2: #f0c040;
   --ink: #ff5a5a;
- 
+
   --riso-pink: #FF48B0;
   --riso-red: #F15060;
   --riso-blue: #3255A4;
@@ -182,9 +30,9 @@ Risograph · HTML
   --riso-purple: #7B5EA7;
   --riso-black: #212121;
 }
- 
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
- 
+
 html, body {
   height: 100%;
   font-family: 'Space Mono', monospace;
@@ -192,14 +40,14 @@ html, body {
   color: var(--text);
   overflow: hidden;
 }
- 
+
 /* ─── LAYOUT ─────────────────────────────────────── */
 #app {
   display: flex;
   height: 100vh;
   width: 100vw;
 }
- 
+
 /* ─── PANEL ──────────────────────────────────────── */
 #panel {
   width: 300px;
@@ -211,13 +59,13 @@ html, body {
   flex-direction: column;
   overflow: hidden;
 }
- 
+
 #panel-header {
   padding: 18px 20px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
- 
+
 #panel-header .logo {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
@@ -228,11 +76,11 @@ html, body {
   align-items: center;
   gap: 8px;
 }
- 
+
 #panel-header .logo span {
   color: var(--accent);
 }
- 
+
 #panel-header .subtitle {
   font-size: 9px;
   letter-spacing: 0.18em;
@@ -240,24 +88,24 @@ html, body {
   margin-top: 3px;
   text-transform: uppercase;
 }
- 
+
 #panel-scroll {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 12px 0 20px;
 }
- 
+
 #panel-scroll::-webkit-scrollbar { width: 4px; }
 #panel-scroll::-webkit-scrollbar-track { background: transparent; }
 #panel-scroll::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
- 
+
 /* ─── SECTIONS ───────────────────────────────────── */
 .section {
   padding: 0 16px;
   margin-bottom: 4px;
 }
- 
+
 .section-header {
   display: flex;
   align-items: center;
@@ -268,7 +116,7 @@ html, body {
   border-bottom: 1px solid var(--border);
   margin-bottom: 10px;
 }
- 
+
 .section-header .s-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
@@ -277,17 +125,17 @@ html, body {
   text-transform: uppercase;
   color: var(--text-dim);
 }
- 
+
 .section-header .s-arrow {
   font-size: 8px;
   color: var(--text-dimmer);
   transition: transform 0.2s;
 }
- 
+
 .section-header.collapsed .s-arrow { transform: rotate(-90deg); }
 .section-body { }
 .section-body.hidden { display: none; }
- 
+
 /* ─── UPLOAD ─────────────────────────────────────── */
 #upload-zone {
   border: 1.5px dashed var(--border2);
@@ -299,19 +147,19 @@ html, body {
   position: relative;
   overflow: hidden;
 }
- 
+
 #upload-zone:hover, #upload-zone.drag-over {
   border-color: var(--accent);
   background: rgba(232,75,58,0.05);
 }
- 
+
 #upload-zone .uz-icon {
   font-size: 24px;
   margin-bottom: 6px;
   display: block;
   opacity: 0.6;
 }
- 
+
 #upload-zone .uz-text {
   font-size: 9px;
   letter-spacing: 0.14em;
@@ -319,16 +167,16 @@ html, body {
   text-transform: uppercase;
   display: block;
 }
- 
+
 #upload-zone .uz-hint {
   font-size: 8px;
   color: var(--text-dimmer);
   margin-top: 3px;
   display: block;
 }
- 
+
 #file-input { display: none; }
- 
+
 .toggle-row {
   display: flex;
   align-items: center;
@@ -336,14 +184,14 @@ html, body {
   padding: 4px 2px;
   margin-bottom: 4px;
 }
- 
+
 .toggle-label {
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--text-dim);
   text-transform: uppercase;
 }
- 
+
 .toggle {
   width: 30px;
   height: 16px;
@@ -354,9 +202,9 @@ html, body {
   transition: background 0.2s;
   flex-shrink: 0;
 }
- 
+
 .toggle.on { background: var(--accent); }
- 
+
 .toggle::after {
   content: '';
   position: absolute;
@@ -368,9 +216,9 @@ html, body {
   border-radius: 50%;
   transition: transform 0.2s;
 }
- 
+
 .toggle.on::after { transform: translateX(14px); }
- 
+
 /* ─── COLORS ─────────────────────────────────────── */
 .color-count-row {
   display: flex;
@@ -378,7 +226,7 @@ html, body {
   gap: 6px;
   margin-bottom: 10px;
 }
- 
+
 .color-count-row .cc-label {
   font-size: 9px;
   color: var(--text-dim);
@@ -386,12 +234,12 @@ html, body {
   text-transform: uppercase;
   flex: 1;
 }
- 
+
 .count-btns {
   display: flex;
   gap: 3px;
 }
- 
+
 .count-btn {
   width: 22px;
   height: 22px;
@@ -407,16 +255,16 @@ html, body {
   justify-content: center;
   transition: all 0.15s;
 }
- 
+
 .count-btn:hover { border-color: var(--accent); color: var(--accent); }
 .count-btn.active { background: var(--accent); border-color: var(--accent); color: white; }
- 
+
 #color-channels {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
- 
+
 .channel {
   display: flex;
   align-items: center;
@@ -427,7 +275,7 @@ html, body {
   border-radius: 4px;
   position: relative;
 }
- 
+
 .channel-swatch {
   width: 18px;
   height: 18px;
@@ -436,7 +284,7 @@ html, body {
   cursor: pointer;
   border: 1.5px solid rgba(0,0,0,0.3);
 }
- 
+
 .channel-name {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 600;
@@ -445,7 +293,7 @@ html, body {
   flex: 1;
   cursor: pointer;
 }
- 
+
 .channel-dropdown {
   position: absolute;
   top: 100%;
@@ -462,9 +310,9 @@ html, body {
   margin-top: 2px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.5);
 }
- 
+
 .channel-dropdown.open { display: flex; }
- 
+
 .color-option {
   width: 22px;
   height: 22px;
@@ -475,14 +323,14 @@ html, body {
   flex-shrink: 0;
   position: relative;
 }
- 
+
 .color-option:hover { transform: scale(1.15); border-color: white; }
 .color-option.selected { border-color: white; }
- 
+
 .color-option[title="Custom"] {
   background: conic-gradient(red,orange,yellow,green,blue,violet,red);
 }
- 
+
 .channel-opacity {
   width: 50px;
   -webkit-appearance: none;
@@ -492,7 +340,7 @@ html, body {
   outline: none;
   cursor: pointer;
 }
- 
+
 .channel-opacity::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 10px;
@@ -501,7 +349,7 @@ html, body {
   background: var(--text);
   cursor: pointer;
 }
- 
+
 /* ─── SELECT ─────────────────────────────────────── */
 .param-row {
   display: flex;
@@ -510,7 +358,7 @@ html, body {
   margin-bottom: 8px;
   gap: 8px;
 }
- 
+
 .param-label {
   font-size: 9px;
   letter-spacing: 0.1em;
@@ -519,7 +367,7 @@ html, body {
   min-width: 70px;
   flex-shrink: 0;
 }
- 
+
 .riso-select {
   flex: 1;
   background: var(--panel2);
@@ -537,28 +385,28 @@ html, body {
   background-position: right 8px center;
   padding-right: 22px;
 }
- 
+
 .riso-select:focus { border-color: var(--accent); }
- 
+
 /* ─── SLIDER ─────────────────────────────────────── */
 .slider-row {
   margin-bottom: 8px;
 }
- 
+
 .slider-meta {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
 }
- 
+
 .slider-meta .sl-label {
   font-size: 9px;
   letter-spacing: 0.1em;
   color: var(--text-dim);
   text-transform: uppercase;
 }
- 
+
 .slider-meta .sl-value {
   font-family: 'Courier Prime', monospace;
   font-size: 10px;
@@ -566,7 +414,7 @@ html, body {
   min-width: 30px;
   text-align: right;
 }
- 
+
 .riso-slider {
   width: 100%;
   -webkit-appearance: none;
@@ -576,7 +424,7 @@ html, body {
   outline: none;
   cursor: pointer;
 }
- 
+
 .riso-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 12px;
@@ -588,9 +436,9 @@ html, body {
   box-shadow: 0 0 0 1px var(--border2);
   transition: background 0.15s;
 }
- 
+
 .riso-slider:hover::-webkit-slider-thumb { background: var(--accent2); }
- 
+
 /* ─── MISREG XY PAD ──────────────────────────────── */
 #misreg-pad-wrap {
   display: flex;
@@ -598,7 +446,7 @@ html, body {
   align-items: flex-start;
   margin-bottom: 8px;
 }
- 
+
 #misreg-pad {
   width: 72px;
   height: 72px;
@@ -609,7 +457,7 @@ html, body {
   cursor: crosshair;
   flex-shrink: 0;
 }
- 
+
 #misreg-pad::before {
   content: '';
   position: absolute;
@@ -620,7 +468,7 @@ html, body {
   background: var(--border2);
   transform: translateY(-50%);
 }
- 
+
 #misreg-pad::after {
   content: '';
   position: absolute;
@@ -631,7 +479,7 @@ html, body {
   background: var(--border2);
   transform: translateX(-50%);
 }
- 
+
 #misreg-dot {
   position: absolute;
   width: 10px;
@@ -644,7 +492,7 @@ html, body {
   pointer-events: none;
   box-shadow: 0 0 6px var(--accent);
 }
- 
+
 .misreg-vals {
   flex: 1;
   display: flex;
@@ -652,26 +500,26 @@ html, body {
   gap: 6px;
   padding-top: 4px;
 }
- 
+
 .misreg-val {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
- 
+
 .misreg-val span:first-child {
   font-size: 9px;
   color: var(--text-dim);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
- 
+
 .misreg-val span:last-child {
   font-family: 'Courier Prime', monospace;
   font-size: 10px;
   color: var(--accent2);
 }
- 
+
 /* ─── CHIP BUTTONS ───────────────────────────────── */
 .chip-row {
   display: flex;
@@ -679,7 +527,7 @@ html, body {
   gap: 5px;
   margin-bottom: 8px;
 }
- 
+
 .chip {
   padding: 4px 8px;
   background: var(--panel2);
@@ -694,10 +542,10 @@ html, body {
   transition: all 0.15s;
   text-transform: uppercase;
 }
- 
+
 .chip:hover { border-color: var(--accent2); color: var(--accent2); }
 .chip.active { background: rgba(240,192,64,0.12); border-color: var(--accent2); color: var(--accent2); }
- 
+
 /* ─── PAPER CHIPS ────────────────────────────────── */
 .paper-chip {
   padding: 5px 8px;
@@ -711,11 +559,11 @@ html, body {
   transition: all 0.15s;
   text-transform: uppercase;
 }
- 
+
 .paper-chip:hover { border-color: var(--text-dim); }
- 
+
 .paper-chip.active { border-color: var(--text); }
- 
+
 /* ─── ACTION ROW ─────────────────────────────────── */
 #panel-actions {
   padding: 12px 16px;
@@ -725,7 +573,7 @@ html, body {
   gap: 6px;
   align-items: stretch;
 }
- 
+
 .btn-process {
   flex: 1;
   padding: 10px;
@@ -741,10 +589,10 @@ html, body {
   cursor: pointer;
   transition: background 0.2s, transform 0.1s;
 }
- 
+
 .btn-process:hover { background: #ff6b5a; }
 .btn-process:active { transform: scale(0.98); }
- 
+
 .btn-export {
   padding: 10px 12px;
   background: transparent;
@@ -759,9 +607,9 @@ html, body {
   cursor: pointer;
   transition: all 0.15s;
 }
- 
+
 .btn-export:hover { border-color: var(--text); color: var(--text); }
- 
+
 /* ─── CANVAS AREA ────────────────────────────────── */
 #canvas-area {
   flex: 1;
@@ -771,7 +619,7 @@ html, body {
   overflow: hidden;
   position: relative;
 }
- 
+
 #canvas-toolbar {
   padding: 10px 20px;
   border-bottom: 1px solid var(--border);
@@ -781,7 +629,7 @@ html, body {
   flex-shrink: 0;
   background: var(--panel);
 }
- 
+
 #canvas-toolbar .ct-info {
   font-size: 9px;
   letter-spacing: 0.12em;
@@ -790,19 +638,19 @@ html, body {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 500;
 }
- 
+
 #canvas-toolbar .ct-sep {
   width: 1px;
   height: 14px;
   background: var(--border);
 }
- 
+
 .zoom-btns {
   display: flex;
   gap: 4px;
   margin-left: auto;
 }
- 
+
 .zoom-btn {
   width: 24px;
   height: 24px;
@@ -817,9 +665,9 @@ html, body {
   justify-content: center;
   transition: all 0.15s;
 }
- 
+
 .zoom-btn:hover { color: var(--text); border-color: var(--text-dim); }
- 
+
 #canvas-container {
   flex: 1;
   overflow: auto;
@@ -829,11 +677,11 @@ html, body {
   position: relative;
   padding: 40px;
 }
- 
+
 #canvas-container::-webkit-scrollbar { width: 6px; height: 6px; }
 #canvas-container::-webkit-scrollbar-track { background: transparent; }
 #canvas-container::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
- 
+
 /* dot grid background */
 #canvas-container::before {
   content: '';
@@ -843,17 +691,17 @@ html, body {
   background-size: 24px 24px;
   pointer-events: none;
 }
- 
+
 #canvas-wrapper {
   position: relative;
   box-shadow: 0 20px 80px rgba(0,0,0,0.7), 0 0 0 1px rgba(255,255,255,0.06);
   transition: transform 0.2s;
 }
- 
+
 canvas {
   display: block;
 }
- 
+
 /* ─── EMPTY STATE ────────────────────────────────── */
 #empty-state {
   position: absolute;
@@ -865,12 +713,12 @@ canvas {
   pointer-events: none;
   gap: 12px;
 }
- 
+
 #empty-state .es-icon {
   font-size: 48px;
   opacity: 0.12;
 }
- 
+
 #empty-state .es-text {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 600;
@@ -879,7 +727,7 @@ canvas {
   text-transform: uppercase;
   color: var(--text-dimmer);
 }
- 
+
 /* ─── PROCESSING OVERLAY ─────────────────────────── */
 #processing-overlay {
   position: absolute;
@@ -893,9 +741,9 @@ canvas {
   z-index: 50;
   backdrop-filter: blur(2px);
 }
- 
+
 #processing-overlay.show { display: flex; }
- 
+
 .proc-spinner {
   width: 32px;
   height: 32px;
@@ -904,9 +752,9 @@ canvas {
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
- 
+
 @keyframes spin { to { transform: rotate(360deg); } }
- 
+
 .proc-text {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 600;
@@ -915,7 +763,7 @@ canvas {
   text-transform: uppercase;
   color: var(--text-dim);
 }
- 
+
 /* ─── STATUS BAR ─────────────────────────────────── */
 #status-bar {
   padding: 5px 20px;
@@ -925,7 +773,7 @@ canvas {
   background: var(--panel);
   flex-shrink: 0;
 }
- 
+
 .sb-item {
   font-size: 8px;
   letter-spacing: 0.1em;
@@ -933,9 +781,9 @@ canvas {
   text-transform: uppercase;
   font-family: 'Barlow Condensed', sans-serif;
 }
- 
+
 .sb-item span { color: var(--text-dim); }
- 
+
 /* ─── CUSTOM HEX INPUT ───────────────────────────── */
 .hex-input-row {
   display: flex;
@@ -947,7 +795,7 @@ canvas {
   border: 1px solid var(--border);
   border-radius: 3px;
 }
- 
+
 .hex-swatch-preview {
   width: 14px;
   height: 14px;
@@ -955,7 +803,7 @@ canvas {
   border: 1px solid rgba(0,0,0,0.3);
   flex-shrink: 0;
 }
- 
+
 .hex-input {
   flex: 1;
   background: transparent;
@@ -967,7 +815,7 @@ canvas {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
- 
+
 .hex-set-btn {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
@@ -980,14 +828,14 @@ canvas {
   text-transform: uppercase;
   padding: 0 2px;
 }
- 
+
 /* ─── DENSITY TOGGLE ─────────────────────────────── */
 .density-mode {
   display: flex;
   gap: 4px;
   margin-bottom: 8px;
 }
- 
+
 .dm-btn {
   flex: 1;
   padding: 5px 4px;
@@ -1004,12 +852,12 @@ canvas {
   text-align: center;
   transition: all 0.15s;
 }
- 
+
 .dm-btn.active { background: rgba(240,192,64,0.1); border-color: var(--accent2); color: var(--accent2); }
- 
+
 /* ─── DIVIDER ────────────────────────────────────── */
 .rule { height: 1px; background: var(--border); margin: 8px 0; }
- 
+
 /* ─── RESET BUTTON ───────────────────────────────── */
 .btn-reset {
   width: 36px;
@@ -1024,7 +872,7 @@ canvas {
   flex-shrink: 0;
 }
 .btn-reset:hover { border-color: var(--text-dim); color: var(--text); transform: rotate(-30deg); }
- 
+
 /* ─── EXPORT MODAL ───────────────────────────────── */
 #export-modal {
   display: none;
@@ -1036,9 +884,9 @@ canvas {
   justify-content: center;
   backdrop-filter: blur(4px);
 }
- 
+
 #export-modal.open { display: flex; }
- 
+
 #export-panel {
   background: #28231e;
   border: 1px solid var(--border2);
@@ -1048,19 +896,19 @@ canvas {
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   animation: slideUp 0.2s ease;
 }
- 
+
 @keyframes slideUp {
   from { opacity:0; transform:translateY(12px); }
   to   { opacity:1; transform:translateY(0); }
 }
- 
+
 .exp-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 18px;
 }
- 
+
 .exp-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
@@ -1068,7 +916,7 @@ canvas {
   letter-spacing: 0.2em;
   color: var(--text);
 }
- 
+
 .exp-close {
   background: none;
   border: none;
@@ -1079,7 +927,7 @@ canvas {
   padding: 2px 6px;
 }
 .exp-close:hover { color: var(--text); }
- 
+
 .exp-section-label {
   font-size: 9px;
   letter-spacing: 0.18em;
@@ -1087,12 +935,12 @@ canvas {
   color: var(--text-dim);
   margin-bottom: 8px;
 }
- 
+
 .exp-format-row {
   display: flex;
   gap: 6px;
 }
- 
+
 .exp-fmt {
   flex: 1;
   padding: 7px 4px;
@@ -1108,16 +956,16 @@ canvas {
   text-align: center;
   transition: all 0.15s;
 }
- 
+
 .exp-fmt:hover { border-color: var(--text-dim); color: var(--text); }
 .exp-fmt.active { background: rgba(232,75,58,0.12); border-color: var(--accent); color: var(--accent); }
- 
+
 .exp-res-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 6px;
 }
- 
+
 .exp-res {
   padding: 8px 10px;
   background: var(--panel2);
@@ -1130,10 +978,10 @@ canvas {
   flex-direction: column;
   gap: 2px;
 }
- 
+
 .exp-res:hover { border-color: var(--text-dim); }
 .exp-res.active { background: rgba(232,75,58,0.1); border-color: var(--accent); }
- 
+
 .res-name {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
@@ -1142,16 +990,16 @@ canvas {
   color: var(--text);
   display: block;
 }
- 
+
 .res-sub {
   font-size: 8px;
   letter-spacing: 0.06em;
   color: var(--text-dimmer);
   display: block;
 }
- 
+
 .exp-res.active .res-name { color: var(--accent); }
- 
+
 .btn-do-export {
   width: 100%;
   margin-top: 18px;
@@ -1167,10 +1015,10 @@ canvas {
   cursor: pointer;
   transition: background 0.2s;
 }
- 
+
 .btn-do-export:hover { background: #ff6b5a; }
 .btn-do-export:disabled { background: var(--border2); color: var(--text-dim); cursor: not-allowed; }
- 
+
 .exp-progress-bar {
   height: 3px;
   background: var(--border2);
@@ -1178,7 +1026,7 @@ canvas {
   margin-top: 6px;
   overflow: hidden;
 }
- 
+
 .exp-progress-fill {
   height: 100%;
   background: var(--accent);
@@ -1186,7 +1034,7 @@ canvas {
   width: 0%;
   transition: width 0.15s;
 }
- 
+
 .exp-mp4-note {
   font-size: 8px;
   color: var(--text-dimmer);
@@ -1194,7 +1042,7 @@ canvas {
   margin-top: 8px;
   line-height: 1.5;
 }
- 
+
 /* ─── PRESETS ────────────────────────────────────── */
 #presets-grid {
   display: grid;
@@ -1202,7 +1050,7 @@ canvas {
   gap: 6px;
   margin-bottom: 10px;
 }
- 
+
 .preset-card {
   border: 1px solid var(--border2);
   border-radius: 4px;
@@ -1212,23 +1060,23 @@ canvas {
   background: var(--panel2);
   position: relative;
 }
- 
+
 .preset-card:hover { border-color: var(--accent2); transform: translateY(-1px); }
 .preset-card.active { border-color: var(--accent); }
- 
+
 .preset-swatches {
   display: flex;
   height: 22px;
 }
- 
+
 .preset-swatch {
   flex: 1;
 }
- 
+
 .preset-info {
   padding: 5px 7px 6px;
 }
- 
+
 .preset-name {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 700;
@@ -1240,7 +1088,7 @@ canvas {
   overflow: hidden;
   text-overflow: ellipsis;
 }
- 
+
 .preset-desc {
   font-size: 7.5px;
   letter-spacing: 0.06em;
@@ -1251,12 +1099,12 @@ canvas {
   overflow: hidden;
   text-overflow: ellipsis;
 }
- 
+
 .preset-card.user-preset .preset-name::before {
   content: '★ ';
   color: var(--accent2);
 }
- 
+
 .preset-delete {
   position: absolute;
   top: 2px;
@@ -1272,10 +1120,10 @@ canvas {
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
 }
- 
+
 .preset-card:hover .preset-delete { opacity: 1; }
 .preset-delete:hover { color: var(--accent); }
- 
+
 .btn-save-preset {
   width: 100%;
   padding: 7px;
@@ -1292,9 +1140,9 @@ canvas {
   transition: all 0.15s;
   margin-top: 4px;
 }
- 
+
 .btn-save-preset:hover { border-color: var(--accent2); color: var(--accent2); }
- 
+
 /* ─── SAVE PRESET MODAL ──────────────────────────── */
 #save-preset-modal {
   display: none;
@@ -1306,9 +1154,9 @@ canvas {
   justify-content: center;
   backdrop-filter: blur(4px);
 }
- 
+
 #save-preset-modal.open { display: flex; }
- 
+
 #save-preset-panel {
   background: #28231e;
   border: 1px solid var(--border2);
@@ -1318,7 +1166,7 @@ canvas {
   box-shadow: 0 24px 80px rgba(0,0,0,0.7);
   animation: slideUp 0.2s ease;
 }
- 
+
 .sp-title {
   font-family: 'Barlow Condensed', sans-serif;
   font-weight: 900;
@@ -1330,7 +1178,7 @@ canvas {
   justify-content: space-between;
   align-items: center;
 }
- 
+
 .sp-input {
   width: 100%;
   background: var(--panel2);
@@ -1344,9 +1192,9 @@ canvas {
   margin-bottom: 10px;
   transition: border-color 0.15s;
 }
- 
+
 .sp-input:focus { border-color: var(--accent2); }
- 
+
 .sp-preview-swatches {
   display: flex;
   height: 14px;
@@ -1355,14 +1203,14 @@ canvas {
   margin-bottom: 14px;
   border: 1px solid var(--border);
 }
- 
+
 .sp-preview-swatch { flex: 1; }
- 
+
 .sp-btns {
   display: flex;
   gap: 8px;
 }
- 
+
 .sp-btn-cancel {
   flex: 1;
   padding: 9px;
@@ -1377,9 +1225,9 @@ canvas {
   cursor: pointer;
   transition: all 0.15s;
 }
- 
+
 .sp-btn-cancel:hover { border-color: var(--text-dim); color: var(--text); }
- 
+
 .sp-btn-save {
   flex: 2;
   padding: 9px;
@@ -1394,9 +1242,9 @@ canvas {
   cursor: pointer;
   transition: background 0.15s;
 }
- 
+
 .sp-btn-save:hover { background: #f8d060; }
- 
+
 /* ─── VIDEO BADGE ────────────────────────────────── */
 .badge {
   display: inline-block;
@@ -1414,18 +1262,18 @@ canvas {
 </style>
 </head>
 <body>
- 
+
 <div id="app">
- 
+
   <!-- ══ CONTROL PANEL ══════════════════════════════════ -->
   <div id="panel">
     <div id="panel-header">
       <div class="logo"><span>RISO</span>GRAPH</div>
       <div class="subtitle">Spot Color Emulator v1.0</div>
     </div>
- 
+
     <div id="panel-scroll">
- 
+
       <!-- UPLOAD -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1446,7 +1294,7 @@ canvas {
           </div>
         </div>
       </div>
- 
+
       <!-- PRESETS -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1458,7 +1306,7 @@ canvas {
           <button class="btn-save-preset" onclick="openSavePresetModal()">+ Save Current as Preset</button>
         </div>
       </div>
- 
+
       <!-- SPOT COLORS -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1484,7 +1332,7 @@ canvas {
           </div>
         </div>
       </div>
- 
+
       <!-- FUSION -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1522,7 +1370,7 @@ canvas {
           </div>
         </div>
       </div>
- 
+
       <!-- DENSITY -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1552,7 +1400,7 @@ canvas {
           </div>
         </div>
       </div>
- 
+
       <!-- PATTERN -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1579,7 +1427,7 @@ canvas {
           </div>
         </div>
       </div>
- 
+
       <!-- MISREGISTRATION -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1631,7 +1479,7 @@ canvas {
           </div>
         </div>
       </div>
- 
+
       <!-- PAPER -->
       <div class="section">
         <div class="section-header" onclick="toggleSection(this)">
@@ -1655,16 +1503,16 @@ canvas {
           </div>
         </div>
       </div>
- 
+
     </div><!-- end scroll -->
- 
+
     <div id="panel-actions">
       <button class="btn-reset" onclick="resetAll()" title="Reset all settings">↺</button>
       <button class="btn-process" onclick="processImage()">▶ PRINT</button>
       <button class="btn-export" onclick="openExportModal()">EXPORT ▾</button>
     </div>
   </div><!-- end panel -->
- 
+
   <!-- ══ EXPORT MODAL ══════════════════════════════════ -->
   <div id="export-modal" onclick="if(event.target===this)closeExportModal()">
     <div id="export-panel">
@@ -1672,14 +1520,14 @@ canvas {
         <span class="exp-title">EXPORT</span>
         <button class="exp-close" onclick="closeExportModal()">✕</button>
       </div>
- 
+
       <div class="exp-section-label">Format</div>
       <div class="exp-format-row" id="exp-format-btns">
         <button class="exp-fmt active" data-fmt="png" onclick="selectFmt(this)">PNG</button>
         <button class="exp-fmt" data-fmt="jpg" onclick="selectFmt(this)">JPG</button>
         <button class="exp-fmt" data-fmt="mp4" onclick="selectFmt(this)" id="fmt-mp4">MP4</button>
       </div>
- 
+
       <div class="exp-section-label" style="margin-top:14px">Resolution</div>
       <div class="exp-res-grid" id="exp-res-btns">
         <button class="exp-res active" data-res="source" onclick="selectRes(this)">
@@ -1699,7 +1547,7 @@ canvas {
           <span class="res-sub">3840 × 2160</span>
         </button>
       </div>
- 
+
       <!-- JPG quality row -->
       <div id="exp-quality-row" style="display:none; margin-top:14px">
         <div class="exp-section-label">JPG Quality</div>
@@ -1709,7 +1557,7 @@ canvas {
           <span style="font-family:'Courier Prime',monospace;font-size:11px;color:var(--accent2);min-width:34px;text-align:right" id="exp-quality-val">92%</span>
         </div>
       </div>
- 
+
       <!-- MP4 options -->
       <div id="exp-mp4-row" style="display:none; margin-top:14px">
         <div class="exp-section-label">Video Duration</div>
@@ -1726,18 +1574,18 @@ canvas {
         </div>
         <div class="exp-mp4-note">⚠ MP4 export uses WebM/VP9 in-browser — rename to .webm if needed</div>
       </div>
- 
+
       <div id="exp-progress-wrap" style="display:none;margin-top:14px">
         <div class="exp-section-label" id="exp-progress-label">Encoding…</div>
         <div class="exp-progress-bar"><div class="exp-progress-fill" id="exp-progress-fill"></div></div>
       </div>
- 
+
       <button class="btn-do-export" id="btn-do-export" onclick="doExport()">
         <span id="exp-btn-label">↓ DOWNLOAD</span>
       </button>
     </div>
   </div>
- 
+
   <!-- ══ CANVAS AREA ═══════════════════════════════════ -->
   <div id="canvas-area">
     <div id="canvas-toolbar">
@@ -1752,7 +1600,7 @@ canvas {
         <button class="zoom-btn" onclick="zoom(0.25)" title="Zoom in">+</button>
       </div>
     </div>
- 
+
     <div id="canvas-container">
       <div id="empty-state">
         <div class="es-icon">◫</div>
@@ -1762,12 +1610,12 @@ canvas {
         <canvas id="main-canvas"></canvas>
       </div>
     </div>
- 
+
     <div id="processing-overlay">
       <div class="proc-spinner"></div>
       <div class="proc-text">Processing…</div>
     </div>
- 
+
     <div id="status-bar">
       <span class="sb-item">Pattern: <span id="sb-pattern">Stochastic</span></span>
       <span class="sb-item">Paper: <span id="sb-paper">Uncoated White</span></span>
@@ -1776,7 +1624,7 @@ canvas {
       <span class="sb-item" style="margin-left:auto" id="sb-status">Ready</span>
     </div>
   </div>
- 
+
   <!-- ══ SAVE PRESET MODAL ═════════════════════════════ -->
   <div id="save-preset-modal" onclick="if(event.target===this)closeSavePresetModal()">
     <div id="save-preset-panel">
@@ -1794,9 +1642,9 @@ canvas {
       </div>
     </div>
   </div>
- 
+
 </div>
- 
+
 <script>
 // ══════════════════════════════════════════════════════
 //  STATE
@@ -1813,14 +1661,14 @@ const RISO_COLORS = [
   { name: 'Black',        hex: '#212121' },
   { name: 'Custom',       hex: null      },
 ];
- 
+
 const PAPER_COLORS = {
   white: '#F5F2EC',
   cream: '#F2E8CF',
   kraft: '#C4A87A',
   rough: '#E8DEC8',
 };
- 
+
 let state = {
   file: null,
   fileType: 'image', // or 'video'
@@ -1848,7 +1696,7 @@ let state = {
   sourceImage: null,
   videoEl: null,
 };
- 
+
 // ══════════════════════════════════════════════════════
 //  INIT COLOR CHANNELS
 // ══════════════════════════════════════════════════════
@@ -1878,20 +1726,20 @@ function buildColorChannels() {
   updateCountBtns();
   document.getElementById('ct-channels').textContent = state.colorCount + ' CHANNELS';
 }
- 
+
 function toggleDropdown(i) {
   const dd = document.getElementById('ch-dd-'+i);
   const wasOpen = dd.classList.contains('open');
   document.querySelectorAll('.channel-dropdown').forEach(d => d.classList.remove('open'));
   if (!wasOpen) dd.classList.add('open');
 }
- 
+
 document.addEventListener('click', e => {
   if (!e.target.closest('.channel')) {
     document.querySelectorAll('.channel-dropdown').forEach(d => d.classList.remove('open'));
   }
 });
- 
+
 function selectChannelColor(i, hex, name) {
   if (hex === 'custom') {
     // Use hex input value
@@ -1903,24 +1751,24 @@ function selectChannelColor(i, hex, name) {
   buildColorChannels();
   if (state.sourceImage) autoProcess();
 }
- 
+
 function updateChannelOpacity(i, val) {
   state.opacities[i] = val / 100;
 }
- 
+
 function setColorCount(n) {
   state.colorCount = n;
   while (state.colors.length < n) state.colors.push('#212121');
   while (state.opacities.length < n) state.opacities.push(0.9);
   buildColorChannels();
 }
- 
+
 function updateCountBtns() {
   document.querySelectorAll('#count-btns .count-btn').forEach(btn => {
     btn.classList.toggle('active', parseInt(btn.textContent) === state.colorCount);
   });
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  CONTROLS
 // ══════════════════════════════════════════════════════
@@ -1929,12 +1777,12 @@ function toggleSection(header) {
   const body = header.nextElementSibling;
   body.classList.toggle('hidden');
 }
- 
+
 function toggleSwitch(el, key) {
   el.classList.toggle('on');
   state[key] = el.classList.contains('on');
 }
- 
+
 function updateParam(key, val) {
   state[key] = val;
   if (key === 'blendMode') {
@@ -1942,7 +1790,7 @@ function updateParam(key, val) {
   }
   if (state.sourceImage) autoProcess();
 }
- 
+
 function sliderUpdate(key, val, unit) {
   state[key] = parseFloat(val);
   const el = document.getElementById('val-' + key);
@@ -1950,17 +1798,17 @@ function sliderUpdate(key, val, unit) {
   if (key === 'lpi') document.getElementById('sb-lpi').textContent = val;
   if (state.sourceImage) scheduleProcess();
 }
- 
+
 let processTimer = null;
 function scheduleProcess() {
   clearTimeout(processTimer);
   processTimer = setTimeout(() => { if (state.sourceImage) processImage(); }, 300);
 }
- 
+
 function autoProcess() {
   if (state.sourceImage) scheduleProcess();
 }
- 
+
 function selectChip(el, group, val) {
   const container = el.parentElement;
   container.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
@@ -1970,7 +1818,7 @@ function selectChip(el, group, val) {
   if (group === 'paper') document.getElementById('sb-paper').textContent = el.textContent;
   if (state.sourceImage) scheduleProcess();
 }
- 
+
 function setDensityMode(mode) {
   state.densityMode = mode;
   document.getElementById('dm-auto').classList.toggle('active', mode === 'auto');
@@ -1980,12 +1828,12 @@ function setDensityMode(mode) {
   document.getElementById('sb-lpi').textContent = lpi;
   if (state.sourceImage) scheduleProcess();
 }
- 
+
 function updateHexPreview(input) {
   const hex = '#' + input.value.replace('#','').padEnd(6,'0');
   document.getElementById('hex-preview').style.background = hex;
 }
- 
+
 function applyHex() {
   const hex = '#' + document.getElementById('hex-input').value.replace('#','');
   // Apply to first selected channel or use as custom
@@ -1995,7 +1843,7 @@ function applyHex() {
     if (state.sourceImage) scheduleProcess();
   }
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  UPLOAD / FILE
 // ══════════════════════════════════════════════════════
@@ -2016,20 +1864,20 @@ function handleFileInput(e) {
   const file = e.target.files[0];
   if (file) loadFile(file);
 }
- 
+
 function loadFile(file) {
   state.file = file;
   document.getElementById('ct-filename').textContent = file.name.toUpperCase();
   const isVideo = file.type.startsWith('video/');
   state.fileType = isVideo ? 'video' : 'image';
- 
+
   if (isVideo) {
     loadVideo(file);
   } else {
     loadImageFile(file);
   }
 }
- 
+
 function loadImageFile(file) {
   const reader = new FileReader();
   reader.onload = e => {
@@ -2044,7 +1892,7 @@ function loadImageFile(file) {
   };
   reader.readAsDataURL(file);
 }
- 
+
 function loadVideo(file) {
   if (state.videoEl) {
     state.videoEl.pause();
@@ -2075,7 +1923,7 @@ function loadVideo(file) {
     animate();
   };
 }
- 
+
 function showCanvas(w, h) {
   document.getElementById('empty-state').style.display = 'none';
   document.getElementById('canvas-wrapper').style.display = '';
@@ -2084,7 +1932,7 @@ function showCanvas(w, h) {
   canvas.height = h;
   resetZoom();
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  CORE RISO PROCESSING
 // ══════════════════════════════════════════════════════
@@ -2094,12 +1942,12 @@ function processImage() {
   const ctx = canvas.getContext('2d');
   const W = canvas.width;
   const H = canvas.height;
- 
+
   // Paper background
   const paperCol = PAPER_COLORS[state.paper] || '#F5F2EC';
   ctx.fillStyle = paperCol;
   ctx.fillRect(0, 0, W, H);
- 
+
   // Get source pixels
   const src = document.createElement('canvas');
   src.width = W;
@@ -2107,69 +1955,69 @@ function processImage() {
   const sctx = src.getContext('2d');
   sctx.drawImage(state.sourceImage, 0, 0, W, H);
   const srcData = sctx.getImageData(0, 0, W, H);
- 
+
   const lpi = state.densityMode === 'auto' ? Math.round(60 + (Math.min(W,H)/20)) : state.lpi;
- 
+
   // Render each color channel
   for (let c = 0; c < state.colorCount; c++) {
     const col = hexToRgb(state.colors[c] || '#212121');
     const chOp = state.opacities[c] !== undefined ? state.opacities[c] : 0.9;
     const offX = c === 0 ? 0 : Math.round(state.misregX * (c * 0.7));
     const offY = c === 0 ? 0 : Math.round(state.misregY * (c * 0.7));
- 
+
     const chCanvas = document.createElement('canvas');
     chCanvas.width = W;
     chCanvas.height = H;
     const cctx = chCanvas.getContext('2d');
- 
+
     renderChannel(cctx, srcData, col, c, state.colorCount, W, H, lpi, offX, offY);
- 
+
     // Over-inking effect
     if (state.overink > 0) {
       applyOverInk(cctx, W, H, state.overink / 100, col);
     }
- 
+
     // Ink bleed
     if (state.bleed > 0) {
       applyBleed(cctx, W, H, state.bleed / 100);
     }
- 
+
     ctx.save();
     ctx.globalCompositeOperation = state.blendMode;
     ctx.globalAlpha = chOp * (state.opacity / 100);
     ctx.drawImage(chCanvas, 0, 0);
     ctx.restore();
   }
- 
+
   // Grain
   if (state.grain > 0) {
     applyGrain(ctx, W, H, state.grain / 100);
   }
- 
+
   // Scanner artifacts
   if (state.scanner > 0) {
     applyScannerArtifacts(ctx, W, H, state.scanner / 100);
   }
- 
+
   // Paper texture overlay (applied last so it affects everything)
   if (state.paperAmount > 0) {
     applyPaperTexture(ctx, W, H, state.paper, state.paperAmount / 100);
   }
- 
+
   document.getElementById('sb-status').textContent = 'Processed';
 }
- 
+
 function renderChannel(ctx, srcData, color, channelIdx, totalChannels, W, H, lpi, offX, offY) {
   const cells = Math.round(lpi * (state.dotsize / 100));
   const cellSize = Math.max(2, Math.floor(Math.min(W, H) / cells));
   const angle = (state.halftoneAngle * Math.PI) / 180;
- 
+
   ctx.clearRect(0, 0, W, H);
- 
+
   // Extract luminance for this channel's portion
   const hueRange = 360 / totalChannels;
   const targetHue = (channelIdx / totalChannels) * 360;
- 
+
   if (state.pattern === 'stochastic') {
     renderStochastic(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, offX, offY);
   } else if (state.pattern === 'dot') {
@@ -2182,7 +2030,7 @@ function renderChannel(ctx, srcData, color, channelIdx, totalChannels, W, H, lpi
     renderDiffusion(ctx, srcData, color, channelIdx, totalChannels, W, H, offX, offY);
   }
 }
- 
+
 function getChannelLuminance(srcData, channelIdx, totalChannels, W, H) {
   // Separate image into color bands
   const lum = new Float32Array(W * H);
@@ -2199,11 +2047,11 @@ function getChannelLuminance(srcData, channelIdx, totalChannels, W, H) {
   }
   return lum;
 }
- 
+
 function renderStochastic(ctx, srcData, color, chIdx, total, W, H, cellSize, offX, offY) {
   const lum = getChannelLuminance(srcData, chIdx, total, W, H);
   ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
- 
+
   for (let y = 0; y < H; y += 2) {
     for (let x = 0; x < W; x += 2) {
       const sx = Math.max(0, Math.min(W-1, x + offX));
@@ -2218,12 +2066,12 @@ function renderStochastic(ctx, srcData, color, chIdx, total, W, H, cellSize, off
     }
   }
 }
- 
+
 function renderDotHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
   const lum = getChannelLuminance(srcData, chIdx, total, W, H);
   ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
   const cs = Math.max(4, cellSize);
- 
+
   for (let cy = -cs; cy < H + cs; cy += cs) {
     for (let cx = -cs; cx < W + cs; cx += cs) {
       const rx = cx * Math.cos(angle) - cy * Math.sin(angle);
@@ -2241,19 +2089,19 @@ function renderDotHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, an
     }
   }
 }
- 
+
 function renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
   const lum = getChannelLuminance(srcData, chIdx, total, W, H);
   ctx.strokeStyle = `rgb(${color.r},${color.g},${color.b})`;
   const spacing = Math.max(3, cellSize);
- 
+
   for (let i = -Math.max(W,H); i < Math.max(W,H)*2; i += spacing) {
     const cosA = Math.cos(angle), sinA = Math.sin(angle);
     const x0 = i * cosA - (-Math.max(W,H)) * sinA;
     const y0 = i * sinA + (-Math.max(W,H)) * cosA;
     const x1 = i * cosA - (Math.max(W,H)*2) * sinA;
     const y1 = i * sinA + (Math.max(W,H)*2) * cosA;
- 
+
     // Sample density along the line
     const midX = Math.round(x0/2+x1/2 + offX);
     const midY = Math.round(y0/2+y1/2 + offY);
@@ -2261,7 +2109,7 @@ function renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, a
     const cY = Math.max(0, Math.min(H-1, midY));
     const density = lum[cY * W + cX];
     const lineW = spacing * 0.9 * density;
- 
+
     if (lineW > 0.2) {
       ctx.lineWidth = lineW;
       ctx.beginPath();
@@ -2271,7 +2119,7 @@ function renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, a
     }
   }
 }
- 
+
 function renderCrosshatch(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
   // Two passes at perpendicular angles
   renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY);
@@ -2279,13 +2127,13 @@ function renderCrosshatch(ctx, srcData, color, chIdx, total, W, H, cellSize, ang
   renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle + Math.PI/2, offX, offY);
   ctx.globalAlpha = 1;
 }
- 
+
 function renderDiffusion(ctx, srcData, color, chIdx, total, W, H, offX, offY) {
   const lum = getChannelLuminance(srcData, chIdx, total, W, H);
   const imgData = ctx.createImageData(W, H);
   const d = imgData.data;
   const err = new Float32Array(W * H);
- 
+
   for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
       const sx = Math.max(0, Math.min(W-1, x + offX));
@@ -2306,10 +2154,10 @@ function renderDiffusion(ctx, srcData, color, chIdx, total, W, H, offX, offY) {
   }
   ctx.putImageData(imgData, 0, 0);
 }
- 
+
 function applyPaperTexture(ctx, W, H, paperType, amount) {
   if (amount <= 0) return;
- 
+
   // Draw fiber/grain texture on top of paper background AFTER inks
   // We use a separate overlay canvas so it composites correctly
   const tex = document.createElement('canvas');
@@ -2317,9 +2165,9 @@ function applyPaperTexture(ctx, W, H, paperType, amount) {
   const tctx = tex.getContext('2d');
   const imgData = tctx.createImageData(W, H);
   const d = imgData.data;
- 
+
   const intensity = amount; // 0..1
- 
+
   if (paperType === 'white' || paperType === 'cream') {
     // Subtle fibre noise — light/dark speckles
     for (let i = 0; i < W * H; i++) {
@@ -2357,16 +2205,16 @@ function applyPaperTexture(ctx, W, H, paperType, amount) {
       }
     }
   }
- 
+
   tctx.putImageData(imgData, 0, 0);
- 
+
   // Composite texture over the final canvas using overlay so it affects ink too
   ctx.save();
   ctx.globalCompositeOperation = 'overlay';
   ctx.globalAlpha = 0.45 + intensity * 0.4;
   ctx.drawImage(tex, 0, 0);
   ctx.restore();
- 
+
   // Second pass: soft vignette darkening for aged feel at higher amounts
   if (intensity > 0.4) {
     const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.3, W/2, H/2, Math.max(W,H)*0.75);
@@ -2379,7 +2227,7 @@ function applyPaperTexture(ctx, W, H, paperType, amount) {
     ctx.restore();
   }
 }
- 
+
 function applyGrain(ctx, W, H, amount) {
   const imageData = ctx.getImageData(0, 0, W, H);
   const d = imageData.data;
@@ -2390,7 +2238,7 @@ function applyGrain(ctx, W, H, amount) {
   }
   ctx.putImageData(imageData, 0, 0);
 }
- 
+
 function applyOverInk(ctx, W, H, amount, color) {
   const imageData = ctx.getImageData(0, 0, W, H);
   const d = imageData.data;
@@ -2405,7 +2253,7 @@ function applyOverInk(ctx, W, H, amount, color) {
   }
   ctx.putImageData(imageData, 0, 0);
 }
- 
+
 function applyBleed(ctx, W, H, amount) {
   if (amount < 0.05) return;
   ctx.save();
@@ -2418,7 +2266,7 @@ function applyBleed(ctx, W, H, amount) {
   ctx.drawImage(tmp, 0, 0);
   ctx.restore();
 }
- 
+
 function applyScannerArtifacts(ctx, W, H, amount) {
   if (amount < 0.05) return;
   // Horizontal scan lines
@@ -2439,12 +2287,12 @@ function applyScannerArtifacts(ctx, W, H, amount) {
   }
   ctx.restore();
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  MISREGISTRATION PAD
 // ══════════════════════════════════════════════════════
 let misregDragging = false;
- 
+
 function startMisregDrag(e) {
   misregDragging = true;
   updateMisreg(e);
@@ -2454,7 +2302,7 @@ function startMisregDrag(e) {
     document.removeEventListener('mousemove', onMisregMove);
   }, { once: true });
 }
- 
+
 function startMisregTouch(e) {
   e.preventDefault();
   updateMisregFromTouch(e.touches[0]);
@@ -2463,10 +2311,10 @@ function startMisregTouch(e) {
     document.removeEventListener('touchmove', onMisregTouchMove);
   }, { once: true });
 }
- 
+
 function onMisregMove(e) { if (misregDragging) updateMisreg(e); }
 function onMisregTouchMove(e) { e.preventDefault(); updateMisregFromTouch(e.touches[0]); }
- 
+
 function updateMisreg(e) {
   const pad = document.getElementById('misreg-pad');
   const rect = pad.getBoundingClientRect();
@@ -2474,7 +2322,7 @@ function updateMisreg(e) {
   const y = Math.max(0, Math.min(rect.height, e.clientY - rect.top));
   setMisregPos(x, y, rect.width, rect.height);
 }
- 
+
 function updateMisregFromTouch(touch) {
   const pad = document.getElementById('misreg-pad');
   const rect = pad.getBoundingClientRect();
@@ -2482,7 +2330,7 @@ function updateMisregFromTouch(touch) {
   const y = Math.max(0, Math.min(rect.height, touch.clientY - rect.top));
   setMisregPos(x, y, rect.width, rect.height);
 }
- 
+
 function setMisregPos(x, y, w, h) {
   const dot = document.getElementById('misreg-dot');
   dot.style.left = x + 'px';
@@ -2493,7 +2341,7 @@ function setMisregPos(x, y, w, h) {
   document.getElementById('misreg-y-val').textContent = (state.misregY >= 0 ? '+' : '') + state.misregY + 'px';
   if (state.sourceImage) scheduleProcess();
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  ZOOM
 // ══════════════════════════════════════════════════════
@@ -2501,7 +2349,7 @@ function zoom(delta) {
   state.zoom = Math.max(0.1, Math.min(4, state.zoom + delta));
   applyZoom();
 }
- 
+
 function resetZoom() {
   const container = document.getElementById('canvas-container');
   const canvas = document.getElementById('main-canvas');
@@ -2511,17 +2359,17 @@ function resetZoom() {
   state.zoom = Math.min(1, Math.min(fw, fh));
   applyZoom();
 }
- 
+
 function applyZoom() {
   document.getElementById('canvas-wrapper').style.transform = `scale(${state.zoom})`;
   document.getElementById('canvas-wrapper').style.transformOrigin = 'center center';
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  EXPORT MODAL
 // ══════════════════════════════════════════════════════
 let exportState = { fmt: 'png', res: 'source', quality: 92, duration: 5, fps: 30 };
- 
+
 function openExportModal() {
   const canvas = document.getElementById('main-canvas');
   if (!canvas.width) { alert('Nothing to export — process an image first.'); return; }
@@ -2533,19 +2381,19 @@ function openExportModal() {
   mp4Btn.title = state.fileType !== 'video' ? 'Load a video to enable MP4 export' : '';
   document.getElementById('export-modal').classList.add('open');
 }
- 
+
 function closeExportModal() {
   document.getElementById('export-modal').classList.remove('open');
   resetExportUI();
 }
- 
+
 function resetExportUI() {
   document.getElementById('exp-progress-wrap').style.display = 'none';
   document.getElementById('exp-progress-fill').style.width = '0%';
   document.getElementById('btn-do-export').disabled = false;
   document.getElementById('exp-btn-label').textContent = '↓ DOWNLOAD';
 }
- 
+
 function selectFmt(btn) {
   document.querySelectorAll('.exp-fmt').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
@@ -2553,91 +2401,91 @@ function selectFmt(btn) {
   document.getElementById('exp-quality-row').style.display = exportState.fmt === 'jpg' ? '' : 'none';
   document.getElementById('exp-mp4-row').style.display = exportState.fmt === 'mp4' ? '' : 'none';
 }
- 
+
 function selectRes(btn) {
   document.querySelectorAll('.exp-res').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   exportState.res = btn.dataset.res;
 }
- 
+
 function selectFps(btn) {
   document.querySelectorAll('#exp-fps-btns .exp-fmt').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   exportState.fps = parseInt(btn.dataset.fps);
 }
- 
+
 function getExportDimensions() {
   const canvas = document.getElementById('main-canvas');
   const srcW = canvas.width, srcH = canvas.height;
   const aspect = srcW / srcH;
- 
+
   const presets = { '1080': [1920,1080], '2k': [2560,1440], '4k': [3840,2160] };
   if (exportState.res === 'source') return [srcW, srcH];
- 
+
   const [pw, ph] = presets[exportState.res];
   // Fit within preset while keeping aspect ratio
   if (aspect >= pw/ph) return [pw, Math.round(pw / aspect)];
   return [Math.round(ph * aspect), ph];
 }
- 
+
 async function doExport() {
   const canvas = document.getElementById('main-canvas');
   if (!canvas.width) return;
- 
+
   const btn = document.getElementById('btn-do-export');
   btn.disabled = true;
- 
+
   if (exportState.fmt === 'mp4') {
     await exportVideo();
   } else {
     exportStillImage();
   }
 }
- 
+
 function exportStillImage() {
   const [tw, th] = getExportDimensions();
   const srcCanvas = document.getElementById('main-canvas');
- 
+
   // Render at target resolution
   const out = document.createElement('canvas');
   out.width = tw; out.height = th;
   const ctx = out.getContext('2d');
   ctx.drawImage(srcCanvas, 0, 0, tw, th);
- 
+
   const fmt = exportState.fmt;
   const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png';
   const quality = parseInt(document.getElementById('exp-quality-slider').value) / 100;
   const ext = fmt === 'jpg' ? 'jpg' : 'png';
- 
+
   const link = document.createElement('a');
   link.download = `risograph_${tw}x${th}.${ext}`;
   link.href = out.toDataURL(mime, quality);
   link.click();
- 
+
   document.getElementById('exp-btn-label').textContent = '✓ SAVED';
   setTimeout(() => { resetExportUI(); closeExportModal(); }, 1200);
 }
- 
+
 async function exportVideo() {
   if (!state.videoEl && state.fileType !== 'video') {
     alert('No video source loaded.');
     resetExportUI();
     return;
   }
- 
+
   const [tw, th] = getExportDimensions();
   const duration = parseInt(document.getElementById('exp-duration-slider').value);
   const fps = exportState.fps;
   const totalFrames = duration * fps;
- 
+
   document.getElementById('exp-progress-wrap').style.display = '';
   document.getElementById('exp-progress-label').textContent = 'Encoding frames…';
   document.getElementById('exp-btn-label').textContent = 'ENCODING…';
- 
+
   // Create off-screen render canvas at target res
   const offCanvas = document.createElement('canvas');
   offCanvas.width = tw; offCanvas.height = th;
- 
+
   // Set up MediaRecorder
   let stream, recorder, chunks = [];
   try {
@@ -2650,7 +2498,7 @@ async function exportVideo() {
     alert('MediaRecorder not supported in this browser. Try Chrome or Edge.');
     resetExportUI(); return;
   }
- 
+
   recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
   recorder.onstop = () => {
     const blob = new Blob(chunks, { type: 'video/webm' });
@@ -2665,15 +2513,15 @@ async function exportVideo() {
     document.getElementById('exp-progress-fill').style.width = '100%';
     setTimeout(() => { resetExportUI(); closeExportModal(); }, 1400);
   };
- 
+
   recorder.start();
- 
+
   // Draw frames
   const offCtx = offCanvas.getContext('2d');
   const mainCanvas = document.getElementById('main-canvas');
   const srcCanvas = document.createElement('canvas');
   srcCanvas.width = tw; srcCanvas.height = th;
- 
+
   for (let f = 0; f < totalFrames; f++) {
     // Draw current processed frame scaled to target
     offCtx.drawImage(mainCanvas, 0, 0, tw, th);
@@ -2686,16 +2534,16 @@ async function exportVideo() {
     document.getElementById('exp-progress-label').textContent = `Frame ${f+1} / ${totalFrames}`;
     await new Promise(r => setTimeout(r, 1000 / fps));
   }
- 
+
   recorder.stop();
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  RESET
 // ══════════════════════════════════════════════════════
 function resetAll() {
   if (!confirm('Reset all settings to defaults?')) return;
- 
+
   state.colorCount = 3;
   state.colors = ['#FF48B0', '#3255A4', '#FFE800'];
   state.opacities = [1.0, 0.9, 0.85];
@@ -2715,11 +2563,11 @@ function resetAll() {
   state.scanner = 10;
   state.paper = 'white';
   state.paperAmount = 40;
- 
+
   // Reset DOM controls
   document.getElementById('blend-mode').value = 'multiply';
   document.getElementById('sb-blend').textContent = 'Multiply';
- 
+
   // Reset all sliders
   const sliderMap = [
     ['opacity',85,'%'],['tint',70,'%'],['lpi',65,''],['dotsize',50,'%'],
@@ -2732,23 +2580,23 @@ function resetAll() {
     const slider = document.querySelector(`input[oninput*="'${key}'"]`);
     if (slider) slider.value = val;
   });
- 
+
   // Reset density mode
   setDensityMode('auto');
- 
+
   // Reset pattern chips
   document.querySelectorAll('#pattern-chips .chip').forEach(c => c.classList.remove('active'));
   document.querySelector('#pattern-chips .chip[onclick*="stochastic"]').classList.add('active');
   document.getElementById('sb-pattern').textContent = 'Stochastic';
- 
+
   // Reset paper chips
   document.querySelectorAll('#paper-chips .chip').forEach(c => c.classList.remove('active'));
   document.querySelector('#paper-chips .chip[onclick*="white"]').classList.add('active');
   document.getElementById('sb-paper').textContent = 'Uncoated White';
- 
+
   // Reset halftone angle
   document.getElementById('halftone-angle').value = '45';
- 
+
   // Reset misreg pad
   const pad = document.getElementById('misreg-pad');
   const dot = document.getElementById('misreg-dot');
@@ -2756,11 +2604,11 @@ function resetAll() {
   dot.style.top = '50%';
   document.getElementById('misreg-x-val').textContent = '0px';
   document.getElementById('misreg-y-val').textContent = '0px';
- 
+
   buildColorChannels();
   if (state.sourceImage) processImage();
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  UTILS
 // ══════════════════════════════════════════════════════
@@ -2770,9 +2618,9 @@ function hexToRgb(hex) {
   const n = parseInt(hex, 16);
   return { r: (n>>16)&255, g: (n>>8)&255, b: n&255 };
 }
- 
+
 function clamp(v) { return Math.max(0, Math.min(255, v)); }
- 
+
 // ══════════════════════════════════════════════════════
 //  PRESETS
 // ══════════════════════════════════════════════════════
@@ -2922,9 +2770,9 @@ const BUILTIN_PRESETS = [
     paperAmount: 65,
   },
 ];
- 
+
 let userPresets = JSON.parse(localStorage.getItem('riso_user_presets') || '[]');
- 
+
 function buildPresetsGrid() {
   const grid = document.getElementById('presets-grid');
   grid.innerHTML = '';
@@ -2933,11 +2781,11 @@ function buildPresetsGrid() {
     const card = document.createElement('div');
     card.className = 'preset-card' + (preset.user ? ' user-preset' : '');
     card.onclick = (e) => { if (!e.target.classList.contains('preset-delete')) applyPreset(preset); };
- 
+
     const swatchHtml = preset.colors.slice(0, preset.colorCount).map(c =>
       `<div class="preset-swatch" style="background:${c}"></div>`
     ).join('');
- 
+
     card.innerHTML = `
       <div class="preset-swatches">${swatchHtml}</div>
       <div class="preset-info">
@@ -2949,7 +2797,7 @@ function buildPresetsGrid() {
     grid.appendChild(card);
   });
 }
- 
+
 function applyPreset(preset) {
   state.colorCount = preset.colorCount;
   state.colors = [...preset.colors];
@@ -2970,12 +2818,12 @@ function applyPreset(preset) {
   state.scanner = preset.scanner;
   state.paper = preset.paper;
   state.paperAmount = preset.paperAmount;
- 
+
   // Sync all DOM controls
   document.getElementById('blend-mode').value = preset.blendMode;
   document.getElementById('sb-blend').textContent = document.getElementById('blend-mode').options[document.getElementById('blend-mode').selectedIndex].text;
   document.getElementById('halftone-angle').value = String(preset.halftoneAngle);
- 
+
   const sliders = [
     ['opacity', preset.opacity, '%'],
     ['tint', preset.tint, '%'],
@@ -2993,23 +2841,23 @@ function applyPreset(preset) {
     const slider = document.querySelector(`input[oninput*="'${key}'"]`);
     if (slider) slider.value = val;
   });
- 
+
   setDensityMode(preset.densityMode);
- 
+
   // Pattern chips
   document.querySelectorAll('#pattern-chips .chip').forEach(c => {
     c.classList.toggle('active', c.getAttribute('onclick').includes(`'${preset.pattern}'`));
   });
   const patternNames = { stochastic:'Stochastic', diffusion:'Diffusion', line:'Line', dot:'Dot', crosshatch:'Cross Hatch' };
   document.getElementById('sb-pattern').textContent = patternNames[preset.pattern] || preset.pattern;
- 
+
   // Paper chips
   document.querySelectorAll('#paper-chips .chip').forEach(c => {
     c.classList.toggle('active', c.getAttribute('onclick').includes(`'${preset.paper}'`));
   });
   const paperNames = { white:'Uncoated White', cream:'Cream Off-White', kraft:'Kraft / Recycled', rough:'Rough Textured' };
   document.getElementById('sb-paper').textContent = paperNames[preset.paper] || preset.paper;
- 
+
   // Misreg pad
   const pad = document.getElementById('misreg-pad');
   const padW = pad.offsetWidth || 72;
@@ -3021,24 +2869,24 @@ function applyPreset(preset) {
   dot.style.top = dotY + 'px';
   document.getElementById('misreg-x-val').textContent = (preset.misregX >= 0 ? '+' : '') + preset.misregX + 'px';
   document.getElementById('misreg-y-val').textContent = (preset.misregY >= 0 ? '+' : '') + preset.misregY + 'px';
- 
+
   buildColorChannels();
- 
+
   // Highlight active preset card
   document.querySelectorAll('.preset-card').forEach((c, i) => {
     const all = [...BUILTIN_PRESETS, ...userPresets];
     c.classList.toggle('active', all[i]?.id === preset.id);
   });
- 
+
   if (state.sourceImage) scheduleProcess();
 }
- 
+
 function deleteUserPreset(id) {
   userPresets = userPresets.filter(p => p.id !== id);
   localStorage.setItem('riso_user_presets', JSON.stringify(userPresets));
   buildPresetsGrid();
 }
- 
+
 // ── SAVE PRESET MODAL ──────────────────────────────
 function openSavePresetModal() {
   // Build color swatches preview
@@ -3049,18 +2897,18 @@ function openSavePresetModal() {
   document.getElementById('save-preset-modal').classList.add('open');
   setTimeout(() => document.getElementById('sp-name-input').focus(), 100);
 }
- 
+
 function closeSavePresetModal() {
   document.getElementById('save-preset-modal').classList.remove('open');
 }
- 
+
 function confirmSavePreset() {
   const name = document.getElementById('sp-name-input').value.trim();
   if (!name) { document.getElementById('sp-name-input').focus(); return; }
- 
+
   const patternNames = { stochastic:'Stochastic', diffusion:'Diffusion', line:'Line', dot:'Dot', crosshatch:'Cross Hatch' };
   const paperNames = { white:'White', cream:'Cream', kraft:'Kraft', rough:'Rough' };
- 
+
   const preset = {
     id: 'user_' + Date.now(),
     name,
@@ -3086,13 +2934,13 @@ function confirmSavePreset() {
     paper: state.paper,
     paperAmount: state.paperAmount,
   };
- 
+
   userPresets.push(preset);
   localStorage.setItem('riso_user_presets', JSON.stringify(userPresets));
   buildPresetsGrid();
   closeSavePresetModal();
 }
- 
+
 // ══════════════════════════════════════════════════════
 //  INIT
 // ══════════════════════════════════════════════════════
@@ -3101,4 +2949,3 @@ document.getElementById('sb-blend').textContent = 'Multiply';
 </script>
 </body>
 </html>
- 

@@ -1387,7 +1387,7 @@ canvas {
               <span class="sl-label">LPI</span>
               <span class="sl-value" id="val-lpi">65</span>
             </div>
-            <input class="riso-slider" type="range" min="30" max="100" value="65"
+            <input class="riso-slider" type="range" min="10" max="200" value="65"
                    oninput="sliderUpdate('lpi', this.value, '')">
           </div>
           <div class="slider-row">
@@ -1395,7 +1395,7 @@ canvas {
               <span class="sl-label">Dot Size</span>
               <span class="sl-value" id="val-dotsize">50%</span>
             </div>
-            <input class="riso-slider" type="range" min="10" max="100" value="50"
+            <input class="riso-slider" type="range" min="5" max="150" value="50"
                    oninput="sliderUpdate('dotsize', this.value, '%')">
           </div>
         </div>
@@ -1496,7 +1496,7 @@ canvas {
           <div class="slider-row">
             <div class="slider-meta">
               <span class="sl-label">Texture Amount</span>
-              <span class="sl-value" id="val-paper-amount">40%</span>
+              <span class="sl-value" id="val-paperAmount">40%</span>
             </div>
             <input class="riso-slider" type="range" min="0" max="100" value="40"
                    oninput="sliderUpdate('paperAmount', this.value, '%')">
@@ -1761,6 +1761,7 @@ function setColorCount(n) {
   while (state.colors.length < n) state.colors.push('#212121');
   while (state.opacities.length < n) state.opacities.push(0.9);
   buildColorChannels();
+  if (state.sourceImage) scheduleProcess();
 }
 
 function updateCountBtns() {
@@ -1936,6 +1937,7 @@ function showCanvas(w, h) {
 // ══════════════════════════════════════════════════════
 //  CORE RISO PROCESSING
 // ══════════════════════════════════════════════════════
+
 function processImage() {
   if (!state.sourceImage) return;
   const canvas = document.getElementById('main-canvas');
@@ -1943,193 +1945,261 @@ function processImage() {
   const W = canvas.width;
   const H = canvas.height;
 
-  // Paper background
+  // ── 1. Paper background ─────────────────────────────
   const paperCol = PAPER_COLORS[state.paper] || '#F5F2EC';
   ctx.fillStyle = paperCol;
   ctx.fillRect(0, 0, W, H);
+  if (state.paperAmount > 0) {
+    applyPaperBase(ctx, W, H, state.paper, state.paperAmount / 100);
+  }
 
-  // Get source pixels
+  // ── 2. Source pixels ─────────────────────────────────
   const src = document.createElement('canvas');
-  src.width = W;
-  src.height = H;
+  src.width = W; src.height = H;
   const sctx = src.getContext('2d');
   sctx.drawImage(state.sourceImage, 0, 0, W, H);
   const srcData = sctx.getImageData(0, 0, W, H);
 
-  const lpi = state.densityMode === 'auto' ? Math.round(60 + (Math.min(W,H)/20)) : state.lpi;
+  // ── Cell size calculation ─────────────────────────────
+  // LPI = lines per inch. We treat the short side of the image as ~8 inches.
+  // So: cellPx = (shortSide / 8) / LPI
+  // LPI 10 → very coarse, LPI 200 → very fine
+  // dotsize% scales the rendered dot radius within each cell (not the grid)
+  const shortSide = Math.min(W, H);
+  const lpiVal = state.densityMode === 'auto' ? 55 : Math.max(10, Math.min(200, state.lpi));
+  const ppi = shortSide / 8; // pixels per inch (assuming 8-inch short side)
+  const rawCell = Math.round(ppi / lpiVal);
+  const cellSize = Math.max(2, Math.min(80, rawCell));
+  // dotFrac: fraction of cell radius to fill (dotsize 5%→tiny, 100%→full, 150%→overlap)
+  const dotFrac = Math.max(0.05, state.dotsize / 100);
 
-  // Render each color channel
+  // ── 3. Ink channels ──────────────────────────────────
   for (let c = 0; c < state.colorCount; c++) {
     const col = hexToRgb(state.colors[c] || '#212121');
-    const chOp = state.opacities[c] !== undefined ? state.opacities[c] : 0.9;
-    const offX = c === 0 ? 0 : Math.round(state.misregX * (c * 0.7));
-    const offY = c === 0 ? 0 : Math.round(state.misregY * (c * 0.7));
+    const chOp = Math.max(0.05, state.opacities[c] !== undefined ? state.opacities[c] : 0.9);
+    const offX = c === 0 ? 0 : Math.round(state.misregX * (c * 0.6));
+    const offY = c === 0 ? 0 : Math.round(state.misregY * (c * 0.6));
 
     const chCanvas = document.createElement('canvas');
-    chCanvas.width = W;
-    chCanvas.height = H;
+    chCanvas.width = W; chCanvas.height = H;
     const cctx = chCanvas.getContext('2d');
 
-    renderChannel(cctx, srcData, col, c, state.colorCount, W, H, lpi, offX, offY);
+    renderChannel(cctx, srcData, col, c, state.colorCount, W, H, cellSize, dotFrac, offX, offY);
 
-    // Over-inking effect
-    if (state.overink > 0) {
-      applyOverInk(cctx, W, H, state.overink / 100, col);
-    }
+    applyInkGrain(cctx, W, H, state.grain / 100, state.overink / 100);
 
-    // Ink bleed
-    if (state.bleed > 0) {
-      applyBleed(cctx, W, H, state.bleed / 100);
-    }
+    if (state.bleed > 5) applyBleed(cctx, W, H, state.bleed / 100);
 
     ctx.save();
     ctx.globalCompositeOperation = state.blendMode;
-    ctx.globalAlpha = chOp * (state.opacity / 100);
+    ctx.globalAlpha = chOp * (state.tint / 100);
     ctx.drawImage(chCanvas, 0, 0);
     ctx.restore();
   }
 
-  // Grain
-  if (state.grain > 0) {
-    applyGrain(ctx, W, H, state.grain / 100);
-  }
-
-  // Scanner artifacts
-  if (state.scanner > 0) {
-    applyScannerArtifacts(ctx, W, H, state.scanner / 100);
-  }
-
-  // Paper texture overlay (applied last so it affects everything)
-  if (state.paperAmount > 0) {
-    applyPaperTexture(ctx, W, H, state.paper, state.paperAmount / 100);
-  }
+  // ── 4. Post effects ──────────────────────────────────
+  if (state.scanner > 0) applyScannerArtifacts(ctx, W, H, state.scanner / 100);
+  if (state.paperAmount > 0) applyPaperOverlay(ctx, W, H, state.paper, state.paperAmount / 100);
 
   document.getElementById('sb-status').textContent = 'Processed';
 }
 
-function renderChannel(ctx, srcData, color, channelIdx, totalChannels, W, H, lpi, offX, offY) {
-  const cells = Math.round(lpi * (state.dotsize / 100));
-  const cellSize = Math.max(2, Math.floor(Math.min(W, H) / cells));
-  const angle = (state.halftoneAngle * Math.PI) / 180;
-
-  ctx.clearRect(0, 0, W, H);
-
-  // Extract luminance for this channel's portion
-  const hueRange = 360 / totalChannels;
-  const targetHue = (channelIdx / totalChannels) * 360;
-
-  if (state.pattern === 'stochastic') {
-    renderStochastic(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, offX, offY);
-  } else if (state.pattern === 'dot') {
-    renderDotHalftone(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, angle, offX, offY, false);
-  } else if (state.pattern === 'line') {
-    renderLineHalftone(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, angle, offX, offY);
-  } else if (state.pattern === 'crosshatch') {
-    renderCrosshatch(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, angle, offX, offY);
-  } else if (state.pattern === 'diffusion') {
-    renderDiffusion(ctx, srcData, color, channelIdx, totalChannels, W, H, offX, offY);
-  }
-}
-
-function getChannelLuminance(srcData, channelIdx, totalChannels, W, H) {
-  // Separate image into color bands
+// ── CHANNEL LUMINANCE ──────────────────────────────────
+// Separates the image into N ink channels properly.
+// Strategy: convert source to Lab-like space, assign each pixel's
+// density to each channel weighted by how close the pixel color is
+// to that ink color vs all other inks (competitive assignment).
+function getChannelLuminance(srcData, channelIdx, allInkColors, W, H) {
   const lum = new Float32Array(W * H);
   const d = srcData.data;
+  const N = allInkColors.length;
+
+  // Normalize all ink colors once
+  const inks = allInkColors.map(c => ({ r: c.r/255, g: c.g/255, b: c.b/255 }));
+  const myInk = inks[channelIdx];
+
   for (let i = 0; i < W * H; i++) {
-    const r = d[i*4]/255, g = d[i*4+1]/255, b = d[i*4+2]/255;
-    // Each channel takes a different weight
-    let v;
-    if (channelIdx === 0) v = r;
-    else if (channelIdx === 1) v = g;
-    else if (channelIdx === 2) v = b;
-    else v = (r + g + b) / 3;
-    lum[i] = 1 - v; // invert for ink density
+    const r = d[i*4]   / 255;
+    const g = d[i*4+1] / 255;
+    const b = d[i*4+2] / 255;
+
+    // Overall perceptual luminance → ink density (dark = more ink)
+    const luma = 1 - (r * 0.299 + g * 0.587 + b * 0.114);
+
+    if (luma < 0.03) { lum[i] = 0; continue; }
+
+    if (N === 1) {
+      lum[i] = luma;
+      continue;
+    }
+
+    // Distance from pixel to each ink color in RGB space
+    // Closer ink = gets more of this pixel's density
+    const dists = inks.map(ink => {
+      const dr = r - ink.r, dg = g - ink.g, db = b - ink.b;
+      return Math.sqrt(dr*dr + dg*dg + db*db);
+    });
+
+    const myDist = dists[channelIdx];
+    const minDist = Math.min(...dists);
+    const maxDist = Math.max(...dists) || 0.001;
+
+    // Softmax-style: channel gets full weight if it's the closest ink,
+    // partial weight based on proximity, zero if it's the farthest
+    // This creates clean separation without hard cutoffs
+    const invDists = dists.map(d => maxDist - d); // invert: closer = higher
+    const sumInv = invDists.reduce((s, v) => s + v, 0) || 0.001;
+    const weight = invDists[channelIdx] / sumInv;
+
+    // Each channel gets its weighted share of total luma
+    // Multiply by N so total across all channels ≈ original luma
+    lum[i] = Math.min(1, luma * weight * Math.sqrt(N));
   }
   return lum;
 }
 
-function renderStochastic(ctx, srcData, color, chIdx, total, W, H, cellSize, offX, offY) {
-  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+function renderChannel(ctx, srcData, color, channelIdx, totalChannels, W, H, cellSize, dotFrac, offX, offY) {
+  // Each channel gets a slight angle offset to create the classic riso rosette
+  const baseAngle = (state.halftoneAngle * Math.PI) / 180;
+  const angle = baseAngle + channelIdx * (Math.PI / 12); // 15° offset per channel
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Collect ALL ink colors for competitive separation
+  const allInkColors = [];
+  for (let i = 0; i < totalChannels; i++) {
+    allInkColors.push(hexToRgb(state.colors[i] || '#212121'));
+  }
+
+  const lum = getChannelLuminance(srcData, channelIdx, allInkColors, W, H);
+
+  if (state.pattern === 'stochastic') {
+    renderStochastic(ctx, lum, color, W, H, cellSize, dotFrac, offX, offY);
+  } else if (state.pattern === 'dot') {
+    renderDotHalftone(ctx, lum, color, W, H, cellSize, dotFrac, angle, offX, offY);
+  } else if (state.pattern === 'line') {
+    renderLineHalftone(ctx, lum, color, W, H, cellSize, dotFrac, angle, offX, offY);
+  } else if (state.pattern === 'crosshatch') {
+    renderCrosshatch(ctx, lum, color, W, H, cellSize, dotFrac, angle, offX, offY);
+  } else if (state.pattern === 'diffusion') {
+    renderDiffusion(ctx, lum, color, W, H, offX, offY);
+  }
+}
+
+// ── STOCHASTIC ────────────────────────────────────────
+function renderStochastic(ctx, lum, color, W, H, cellSize, dotFrac, offX, offY) {
+  // step = grid sampling distance; dotFrac scales dot size within that grid
+  const step = Math.max(1, cellSize);
+  const maxR = step * 0.7 * dotFrac;
+
   ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
 
-  for (let y = 0; y < H; y += 2) {
-    for (let x = 0; x < W; x += 2) {
+  for (let y = 0; y < H; y += step) {
+    for (let x = 0; x < W; x += step) {
       const sx = Math.max(0, Math.min(W-1, x + offX));
       const sy = Math.max(0, Math.min(H-1, y + offY));
       const density = lum[sy * W + sx];
-      if (Math.random() < density * 0.9) {
-        const dotR = 0.8 + Math.random() * 1.2;
+      if (density < 0.02) continue;
+
+      // Scatter 1-4 dots per cell based on density
+      const dotCount = Math.ceil(density * 3.5);
+      for (let d = 0; d < dotCount; d++) {
+        if (Math.random() > density) continue;
+        // Scatter within cell + half-cell margin
+        const jx = x + (Math.random() - 0.5) * step * 1.8;
+        const jy = y + (Math.random() - 0.5) * step * 1.8;
+        const r = maxR * (0.4 + Math.random() * 0.6) * Math.pow(density, 0.6);
+        if (r < 0.3) continue;
         ctx.beginPath();
-        ctx.arc(x + Math.random()*2, y + Math.random()*2, dotR, 0, Math.PI*2);
+        ctx.arc(jx, jy, r, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
 }
 
-function renderDotHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
-  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+// ── DOT HALFTONE ──────────────────────────────────────
+function renderDotHalftone(ctx, lum, color, W, H, cellSize, dotFrac, angle, offX, offY) {
   ctx.fillStyle = `rgb(${color.r},${color.g},${color.b})`;
-  const cs = Math.max(4, cellSize);
+  const cs = Math.max(2, cellSize);
+  const maxR = cs * 0.5 * dotFrac; // max dot radius; dotFrac scales it
 
-  for (let cy = -cs; cy < H + cs; cy += cs) {
-    for (let cx = -cs; cx < W + cs; cx += cs) {
-      const rx = cx * Math.cos(angle) - cy * Math.sin(angle);
-      const ry = cx * Math.sin(angle) + cy * Math.cos(angle);
-      const px = Math.round(rx + offX);
-      const py = Math.round(ry + offY);
-      if (px < 0 || px >= W || py < 0 || py >= H) continue;
-      const density = lum[py * W + px];
-      const radius = (cs / 2) * Math.sqrt(density);
-      if (radius > 0.3) {
-        ctx.beginPath();
-        ctx.arc(rx, ry, radius, 0, Math.PI * 2);
-        ctx.fill();
-      }
+  const cosA = Math.cos(-angle), sinA = Math.sin(-angle);
+  const diag = Math.sqrt(W*W + H*H) + cs * 2;
+
+  // Iterate in rotated grid space
+  for (let v = -diag; v < diag; v += cs) {
+    for (let u = -diag; u < diag; u += cs) {
+      // Transform back to canvas coords
+      const cx = u * cosA - v * sinA + W/2;
+      const cy = u * sinA + v * cosA + H/2;
+      if (cx < -cs || cx > W+cs || cy < -cs || cy > H+cs) continue;
+
+      const sx = Math.max(0, Math.min(W-1, Math.round(cx + offX)));
+      const sy = Math.max(0, Math.min(H-1, Math.round(cy + offY)));
+      const density = lum[sy * W + sx];
+      if (density < 0.015) continue;
+
+      const r = maxR * Math.sqrt(density) * (0.9 + Math.random() * 0.2);
+      if (r < 0.2) continue;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fill();
     }
   }
 }
 
-function renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
-  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+// ── LINE HALFTONE ─────────────────────────────────────
+function renderLineHalftone(ctx, lum, color, W, H, cellSize, dotFrac, angle, offX, offY) {
+  const spacing = Math.max(1, cellSize);
+  // Max line width is spacing * dotFrac (so dotFrac=1 = lines touching, >1 = overlap)
+  const maxLW = spacing * dotFrac;
   ctx.strokeStyle = `rgb(${color.r},${color.g},${color.b})`;
-  const spacing = Math.max(3, cellSize);
+  ctx.lineCap = 'butt';
 
-  for (let i = -Math.max(W,H); i < Math.max(W,H)*2; i += spacing) {
-    const cosA = Math.cos(angle), sinA = Math.sin(angle);
-    const x0 = i * cosA - (-Math.max(W,H)) * sinA;
-    const y0 = i * sinA + (-Math.max(W,H)) * cosA;
-    const x1 = i * cosA - (Math.max(W,H)*2) * sinA;
-    const y1 = i * sinA + (Math.max(W,H)*2) * cosA;
+  const cosA = Math.cos(-angle), sinA = Math.sin(-angle);
+  const diag = Math.sqrt(W*W + H*H) + spacing * 2;
 
-    // Sample density along the line
-    const midX = Math.round(x0/2+x1/2 + offX);
-    const midY = Math.round(y0/2+y1/2 + offY);
-    const cX = Math.max(0, Math.min(W-1, midX));
-    const cY = Math.max(0, Math.min(H-1, midY));
-    const density = lum[cY * W + cX];
-    const lineW = spacing * 0.9 * density;
+  for (let t = -diag; t < diag; t += spacing) {
+    // Sample density at multiple points along each line
+    const pts = [];
+    const segStep = Math.max(2, spacing * 2);
+    for (let s = -diag; s < diag; s += segStep) {
+      const cx = (t * cosA - s * sinA) + W/2;
+      const cy = (t * sinA + s * cosA) + H/2;
+      if (cx < -spacing || cx > W+spacing || cy < -spacing || cy > H+spacing) continue;
+      const sx = Math.max(0, Math.min(W-1, Math.round(cx + offX)));
+      const sy = Math.max(0, Math.min(H-1, Math.round(cy + offY)));
+      pts.push({ cx, cy, density: lum[sy * W + sx] });
+    }
 
-    if (lineW > 0.2) {
-      ctx.lineWidth = lineW;
+    // Draw line segments with variable width
+    for (let p = 0; p < pts.length - 1; p++) {
+      const density = (pts[p].density + pts[p+1].density) / 2;
+      if (density < 0.02) continue;
+      const lw = maxLW * density;
+      if (lw < 0.2) continue;
+      ctx.lineWidth = lw;
       ctx.beginPath();
-      ctx.moveTo(x0, y0);
-      ctx.lineTo(x1, y1);
+      ctx.moveTo(pts[p].cx, pts[p].cy);
+      ctx.lineTo(pts[p+1].cx, pts[p+1].cy);
       ctx.stroke();
     }
   }
 }
 
-function renderCrosshatch(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY) {
-  // Two passes at perpendicular angles
-  renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle, offX, offY);
-  ctx.globalAlpha = 0.5;
-  renderLineHalftone(ctx, srcData, color, chIdx, total, W, H, cellSize, angle + Math.PI/2, offX, offY);
-  ctx.globalAlpha = 1;
+// ── CROSSHATCH ────────────────────────────────────────
+function renderCrosshatch(ctx, lum, color, W, H, cellSize, dotFrac, angle, offX, offY) {
+  renderLineHalftone(ctx, lum, color, W, H, cellSize, dotFrac * 0.65, angle, offX, offY);
+  ctx.save();
+  ctx.globalAlpha = 0.7;
+  renderLineHalftone(ctx, lum, color, W, H, cellSize, dotFrac * 0.65, angle + Math.PI/2, offX, offY);
+  ctx.restore();
 }
 
-function renderDiffusion(ctx, srcData, color, chIdx, total, W, H, offX, offY) {
-  const lum = getChannelLuminance(srcData, chIdx, total, W, H);
+// ── DIFFUSION DITHER ──────────────────────────────────
+// Fixed: uses proper alpha rather than hard 0/255
+function renderDiffusion(ctx, lum, color, W, H, offX, offY) {
   const imgData = ctx.createImageData(W, H);
   const d = imgData.data;
   const err = new Float32Array(W * H);
@@ -2139,151 +2209,154 @@ function renderDiffusion(ctx, srcData, color, chIdx, total, W, H, offX, offY) {
       const sx = Math.max(0, Math.min(W-1, x + offX));
       const sy = Math.max(0, Math.min(H-1, y + offY));
       const i = y * W + x;
-      const old = lum[sy*W+sx] + err[i];
-      const nv = old > 0.5 ? 1 : 0;
+      const old = Math.min(1, Math.max(0, lum[sy*W+sx] + err[i]));
+      const nv = old > 0.45 ? 1 : 0;
       const e = old - nv;
-      if (x+1 < W) err[i+1] += e * 7/16;
-      if (x-1 >= 0 && y+1 < H) err[i+W-1] += e * 3/16;
-      if (y+1 < H) err[i+W] += e * 5/16;
+      if (x+1 < W)            err[i+1]   += e * 7/16;
+      if (x > 0 && y+1 < H)   err[i+W-1] += e * 3/16;
+      if (y+1 < H)             err[i+W]   += e * 5/16;
       if (x+1 < W && y+1 < H) err[i+W+1] += e * 1/16;
       if (nv > 0) {
-        const di = (y*W+x)*4;
-        d[di] = color.r; d[di+1] = color.g; d[di+2] = color.b; d[di+3] = 255;
+        const di = i * 4;
+        d[di] = color.r; d[di+1] = color.g; d[di+2] = color.b;
+        d[di+3] = 220; // slightly transparent so multiply blend works
       }
     }
   }
   ctx.putImageData(imgData, 0, 0);
 }
 
-function applyPaperTexture(ctx, W, H, paperType, amount) {
-  if (amount <= 0) return;
+// ── INK GRAIN ─────────────────────────────────────────
+function applyInkGrain(ctx, W, H, grainAmount, overinkAmount) {
+  if (grainAmount < 0.02 && overinkAmount < 0.02) return;
+  const imgData = ctx.getImageData(0, 0, W, H);
+  const d = imgData.data;
+  const gScale = grainAmount * 60;
+  const oScale = overinkAmount * 45;
+  for (let i = 0; i < W * H; i++) {
+    const a = d[i*4+3];
+    if (a < 8) continue;
+    const noise = (Math.random() - 0.5) * 2;
+    const light = noise > 0 ? noise * gScale * 1.3 : noise * gScale * 0.7;
+    const over = Math.random() < overinkAmount * 0.5 ? -oScale * Math.random() : 0;
+    const di = i * 4;
+    d[di]   = clamp(d[di]   + light + over);
+    d[di+1] = clamp(d[di+1] + light + over);
+    d[di+2] = clamp(d[di+2] + light + over);
+    if (Math.random() < grainAmount * 0.2) {
+      d[di+3] = Math.max(0, a - Math.random() * gScale * 2.5);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
 
-  // Draw fiber/grain texture on top of paper background AFTER inks
-  // We use a separate overlay canvas so it composites correctly
+// ── PAPER BASE ────────────────────────────────────────
+function applyPaperBase(ctx, W, H, paperType, amount) {
+  if (amount <= 0) return;
+  const imgData = ctx.getImageData(0, 0, W, H);
+  const d = imgData.data;
+  const scale = amount * 20;
+  for (let i = 0; i < W * H; i++) {
+    const di = i * 4;
+    if (paperType === 'kraft') {
+      const n = Math.random() * scale;
+      d[di]   = clamp(d[di]   - n * 0.2);
+      d[di+1] = clamp(d[di+1] - n * 0.4);
+      d[di+2] = clamp(d[di+2] - n * 0.9);
+    } else if (paperType === 'rough') {
+      const n = (Math.random() - 0.5) * scale * 2.5;
+      d[di]   = clamp(d[di]   + n);
+      d[di+1] = clamp(d[di+1] + n);
+      d[di+2] = clamp(d[di+2] + n);
+    } else {
+      const n = (Math.random() - 0.5) * scale;
+      d[di]   = clamp(d[di]   + n);
+      d[di+1] = clamp(d[di+1] + n);
+      d[di+2] = clamp(d[di+2] + n);
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+// ── PAPER OVERLAY ─────────────────────────────────────
+function applyPaperOverlay(ctx, W, H, paperType, amount) {
+  if (amount <= 0) return;
   const tex = document.createElement('canvas');
   tex.width = W; tex.height = H;
   const tctx = tex.getContext('2d');
-  const imgData = tctx.createImageData(W, H);
-  const d = imgData.data;
+  const id = tctx.createImageData(W, H);
+  const d = id.data;
 
-  const intensity = amount; // 0..1
-
-  if (paperType === 'white' || paperType === 'cream') {
-    // Subtle fibre noise — light/dark speckles
-    for (let i = 0; i < W * H; i++) {
-      const n = (Math.random() - 0.5) * 2; // -1..1
-      const v = n > 0
-        ? Math.floor(n * 255 * intensity * 0.55)   // lighten
-        : Math.floor(n * 255 * intensity * 0.35);  // darken less
-      d[i*4]   = 128 + v;
-      d[i*4+1] = 128 + v;
-      d[i*4+2] = 128 + v;
-      d[i*4+3] = Math.round(Math.abs(n) * 200 * intensity);
-    }
-  } else if (paperType === 'kraft') {
-    // Warm fibrous noise with brown bias
-    for (let i = 0; i < W * H; i++) {
-      const n = (Math.random() - 0.5) * 2;
-      const v = Math.floor(Math.abs(n) * 180 * intensity);
-      d[i*4]   = n > 0 ? 200 : 80;
-      d[i*4+1] = n > 0 ? 160 : 50;
-      d[i*4+2] = n > 0 ? 80  : 20;
-      d[i*4+3] = v;
-    }
-  } else if (paperType === 'rough') {
-    // Coarser, bigger grain — simulate laid lines
+  if (paperType === 'rough') {
     for (let y = 0; y < H; y++) {
-      const lineNoise = (Math.random() - 0.5) * 60 * intensity;
+      const lv = Math.sin(y * 0.9) * amount * 0.12;
       for (let x = 0; x < W; x++) {
         const i = y * W + x;
-        const grain = (Math.random() - 0.5) * 2;
-        const v = grain * 220 * intensity + lineNoise * 0.3;
-        d[i*4]   = 128;
-        d[i*4+1] = 128;
-        d[i*4+2] = 128;
-        d[i*4+3] = Math.min(255, Math.abs(v) * 1.2);
+        const n = (Math.random() - 0.5) * 2;
+        const v = n * 180 * amount + lv * 128;
+        const a = Math.min(220, Math.abs(v) * 1.6);
+        d[i*4] = v > 0 ? 240 : 20; d[i*4+1] = v > 0 ? 235 : 18; d[i*4+2] = v > 0 ? 220 : 15; d[i*4+3] = a;
       }
     }
-  }
-
-  tctx.putImageData(imgData, 0, 0);
-
-  // Composite texture over the final canvas using overlay so it affects ink too
-  ctx.save();
-  ctx.globalCompositeOperation = 'overlay';
-  ctx.globalAlpha = 0.45 + intensity * 0.4;
-  ctx.drawImage(tex, 0, 0);
-  ctx.restore();
-
-  // Second pass: soft vignette darkening for aged feel at higher amounts
-  if (intensity > 0.4) {
-    const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.3, W/2, H/2, Math.max(W,H)*0.75);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(1, `rgba(0,0,0,${(intensity - 0.4) * 0.35})`);
-    ctx.save();
-    ctx.globalCompositeOperation = 'multiply';
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
-    ctx.restore();
-  }
-}
-
-function applyGrain(ctx, W, H, amount) {
-  const imageData = ctx.getImageData(0, 0, W, H);
-  const d = imageData.data;
-  const scale = amount * 40;
-  for (let i = 0; i < d.length; i += 4) {
-    const noise = (Math.random() - 0.5) * scale;
-    d[i] = clamp(d[i]+noise); d[i+1] = clamp(d[i+1]+noise); d[i+2] = clamp(d[i+2]+noise);
-  }
-  ctx.putImageData(imageData, 0, 0);
-}
-
-function applyOverInk(ctx, W, H, amount, color) {
-  const imageData = ctx.getImageData(0, 0, W, H);
-  const d = imageData.data;
-  const spread = Math.max(1, Math.round(amount * 3));
-  for (let i = 0; i < d.length; i += 4) {
-    if (d[i+3] > 0 && Math.random() < amount * 0.3) {
-      // Spread ink randomly
-      d[i] = clamp(d[i] - Math.random() * 20);
-      d[i+1] = clamp(d[i+1] - Math.random() * 20);
-      d[i+2] = clamp(d[i+2] - Math.random() * 20);
+  } else if (paperType === 'kraft') {
+    for (let i = 0; i < W*H; i++) {
+      const n = Math.random() * 200 * amount;
+      d[i*4] = 160; d[i*4+1] = 100; d[i*4+2] = 40; d[i*4+3] = n * 0.45;
+    }
+  } else {
+    for (let i = 0; i < W*H; i++) {
+      const n = (Math.random() - 0.5) * 2;
+      const v = n * 150 * amount;
+      d[i*4] = v > 0 ? 255 : 0; d[i*4+1] = v > 0 ? 255 : 0; d[i*4+2] = v > 0 ? 255 : 0;
+      d[i*4+3] = Math.abs(v) * 0.65;
     }
   }
-  ctx.putImageData(imageData, 0, 0);
+  tctx.putImageData(id, 0, 0);
+  ctx.save();
+  ctx.globalCompositeOperation = 'soft-light';
+  ctx.globalAlpha = 0.25 + amount * 0.55;
+  ctx.drawImage(tex, 0, 0);
+  if (amount > 0.3) {
+    const grad = ctx.createRadialGradient(W/2, H/2, Math.min(W,H)*0.2, W/2, H/2, Math.max(W,H)*0.85);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(1, `rgba(20,10,0,${(amount - 0.3) * 0.28})`);
+    ctx.globalCompositeOperation = 'multiply';
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+  }
+  ctx.restore();
 }
+
+// Keep alias
+function applyPaperTexture(ctx, W, H, paperType, amount) {
+  applyPaperOverlay(ctx, W, H, paperType, amount);
+}
+function applyGrain() {}
+function applyOverInk() {}
 
 function applyBleed(ctx, W, H, amount) {
   if (amount < 0.05) return;
-  ctx.save();
-  ctx.filter = `blur(${amount * 2}px)`;
+  const blurPx = amount * 2.5;
   const tmp = document.createElement('canvas');
-  tmp.width = W; tmp.height = H;
+  tmp.width = ctx.canvas.width; tmp.height = ctx.canvas.height;
   const tctx = tmp.getContext('2d');
+  tctx.filter = `blur(${blurPx}px)`;
   tctx.drawImage(ctx.canvas, 0, 0);
-  ctx.clearRect(0, 0, W, H);
+  ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
   ctx.drawImage(tmp, 0, 0);
-  ctx.restore();
 }
 
 function applyScannerArtifacts(ctx, W, H, amount) {
   if (amount < 0.05) return;
-  // Horizontal scan lines
   ctx.save();
-  ctx.globalAlpha = amount * 0.15;
-  const lineCount = Math.round(amount * 5);
+  const lineCount = Math.round(amount * 8);
   for (let i = 0; i < lineCount; i++) {
     const y = Math.random() * H;
-    const thickness = 1 + Math.random() * 2;
-    ctx.fillStyle = Math.random() > 0.5 ? 'white' : 'black';
-    ctx.fillRect(0, y, W, thickness);
-  }
-  // Slight skew
-  if (amount > 0.3) {
-    ctx.globalAlpha = amount * 0.1;
-    ctx.globalCompositeOperation = 'overlay';
-    ctx.drawImage(ctx.canvas, Math.random()*4 - 2, 0);
+    const h = 0.5 + Math.random() * 2;
+    ctx.globalAlpha = amount * 0.12 * Math.random();
+    ctx.fillStyle = Math.random() > 0.5 ? 'white' : '#111';
+    ctx.fillRect(0, y, W * (0.3 + Math.random() * 0.7), h);
   }
   ctx.restore();
 }
@@ -2945,6 +3018,7 @@ function confirmSavePreset() {
 //  INIT
 // ══════════════════════════════════════════════════════
 buildColorChannels();
+buildPresetsGrid();
 document.getElementById('sb-blend').textContent = 'Multiply';
 </script>
 </body>

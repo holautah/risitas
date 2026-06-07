@@ -1558,21 +1558,9 @@ canvas {
         </div>
       </div>
 
-      <!-- MP4 options -->
+      <!-- MP4 info (no controls needed — exports exact video with effect) -->
       <div id="exp-mp4-row" style="display:none; margin-top:14px">
-        <div class="exp-section-label">Video Duration</div>
-        <div style="display:flex;align-items:center;gap:10px;margin-top:6px">
-          <input class="riso-slider" type="range" min="1" max="30" value="5" id="exp-duration-slider"
-                 oninput="document.getElementById('exp-duration-val').textContent=this.value+'s'" style="flex:1">
-          <span style="font-family:'Courier Prime',monospace;font-size:11px;color:var(--accent2);min-width:30px;text-align:right" id="exp-duration-val">5s</span>
-        </div>
-        <div class="exp-section-label" style="margin-top:10px">FPS</div>
-        <div class="exp-format-row" style="margin-top:6px" id="exp-fps-btns">
-          <button class="exp-fmt" data-fps="24" onclick="selectFps(this)">24</button>
-          <button class="exp-fmt active" data-fps="30" onclick="selectFps(this)">30</button>
-          <button class="exp-fmt" data-fps="60" onclick="selectFps(this)">60</button>
-        </div>
-        <div class="exp-mp4-note">⚠ MP4 export uses WebM/VP9 in-browser — rename to .webm if needed</div>
+        <div class="exp-mp4-note" id="exp-mp4-note">Exports the full uploaded video with the riso effect applied, at the selected resolution.</div>
       </div>
 
       <div id="exp-progress-wrap" style="display:none;margin-top:14px">
@@ -1866,10 +1854,45 @@ function handleFileInput(e) {
   if (file) loadFile(file);
 }
 
+// ── VIDEO / IMAGE MANAGEMENT ───────────────────────────
+let _rafId = null;
+let _videoLoopRunning = false;
+let _lastFrameTime = 0;
+const VIDEO_TARGET_FPS = 24; // cap preview at 24fps for performance
+const VIDEO_PREVIEW_MAX = 720; // max preview dimension (downscale for speed)
+
+function stopVideoLoop() {
+  _videoLoopRunning = false;
+  if (_rafId !== null) {
+    cancelAnimationFrame(_rafId);
+    _rafId = null;
+  }
+  if (state.videoEl) {
+    state.videoEl.oncanplay = null;
+    state.videoEl.onloadedmetadata = null;
+    state.videoEl.onseeked = null;
+    try { state.videoEl.pause(); } catch(e) {}
+    try {
+      const blobUrl = state.videoEl._blobUrl;
+      state.videoEl.removeAttribute('src');
+      state.videoEl.load();
+      if (blobUrl) setTimeout(() => URL.revokeObjectURL(blobUrl), 500);
+    } catch(e) {}
+    state.videoEl = null;
+  }
+  state.sourceImage = null;
+}
+
 function loadFile(file) {
+  // Kill everything before loading anything new
+  stopVideoLoop();
   state.file = file;
   document.getElementById('ct-filename').textContent = file.name.toUpperCase();
-  const isVideo = file.type.startsWith('video/');
+
+  // Detect video by MIME type OR file extension (covers .mov which reports video/quicktime)
+  const ext = file.name.split('.').pop().toLowerCase();
+  const videoExts = ['mp4', 'webm', 'mov', 'avi', 'mkv', 'm4v', 'ogv'];
+  const isVideo = file.type.startsWith('video/') || videoExts.includes(ext);
   state.fileType = isVideo ? 'video' : 'image';
 
   if (isVideo) {
@@ -1884,6 +1907,7 @@ function loadImageFile(file) {
   reader.onload = e => {
     const img = new Image();
     img.onload = () => {
+      if (state.fileType !== 'image') return;
       state.sourceImage = img;
       document.getElementById('ct-dims').textContent = img.width + ' × ' + img.height;
       showCanvas(img.width, img.height);
@@ -1895,34 +1919,129 @@ function loadImageFile(file) {
 }
 
 function loadVideo(file) {
-  if (state.videoEl) {
-    state.videoEl.pause();
-    state.videoEl.src = '';
+  // Check if this format can actually play in the browser before bothering
+  const ext = file.name.split('.').pop().toLowerCase();
+  const browserVideo = document.createElement('video');
+
+  // .mov (QuickTime) is not supported in most browsers except Safari
+  const unsupported = ext === 'mov' && !browserVideo.canPlayType('video/quicktime').match(/maybe|probably/);
+  // Also check avi/mkv which browsers generally can't play
+  const alwaysUnsupported = ['avi', 'mkv'].includes(ext);
+
+  if (unsupported || alwaysUnsupported) {
+    // Clean up state
+    state.fileType = 'image'; // prevent video mode
+    state.videoEl = null;
+    const msg = ext === 'mov'
+      ? '.MOV files are not supported in this browser.\nPlease convert to MP4 or WebM and try again.'
+      : `'.${ext.toUpperCase()}' is not supported. Please use MP4 or WebM.`;
+    alert(msg);
+    // Reset filename display
+    document.getElementById('ct-filename').textContent = 'NO FILE LOADED';
+    return;
   }
+
+  const blobUrl = URL.createObjectURL(file);
   const video = document.createElement('video');
   video.muted = true;
   video.loop = true;
   video.playsInline = true;
-  video.src = URL.createObjectURL(file);
-  video.onloadeddata = () => {
-    video.currentTime = 0;
-    video.play();
+  // Do NOT set crossOrigin on blob URLs — it breaks loading
+  video._blobUrl = blobUrl;
+
+  let loopStarted = false;
+  let metadataLoaded = false;
+
+  video.onloadedmetadata = () => {
+    if (metadataLoaded) return; // fire once
+    metadataLoaded = true;
+
+    if (state.fileType !== 'video') {
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
+
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+
+    if (!vw || !vh) {
+      // Dimensions not ready yet — wait for canplay
+      return;
+    }
+
+    const scale = Math.min(1, VIDEO_PREVIEW_MAX / Math.max(vw, vh));
+    const pw = Math.round(vw * scale);
+    const ph = Math.round(vh * scale);
+
+    document.getElementById('ct-dims').textContent = vw + ' × ' + vh;
+    showCanvas(pw, ph);
+
     state.videoEl = video;
     state.sourceImage = video;
-    const w = state.lowQuality ? Math.floor(video.videoWidth * 0.5) : video.videoWidth;
-    const h = state.lowQuality ? Math.floor(video.videoHeight * 0.5) : video.videoHeight;
-    document.getElementById('ct-dims').textContent = video.videoWidth + ' × ' + video.videoHeight;
-    showCanvas(video.videoWidth, video.videoHeight);
-    processImage();
-    // animate
-    const animate = () => {
-      if (state.videoEl === video) {
-        processImage();
-        requestAnimationFrame(animate);
-      }
-    };
-    animate();
+
+    video.play().catch(err => console.warn('Autoplay blocked:', err));
   };
+
+  video.oncanplay = () => {
+    if (state.fileType !== 'video') return;
+
+    // If metadata fired but dimensions weren't ready, set them up now
+    if (!state.videoEl && video.videoWidth) {
+      const vw = video.videoWidth;
+      const vh = video.videoHeight;
+      const scale = Math.min(1, VIDEO_PREVIEW_MAX / Math.max(vw, vh));
+      showCanvas(Math.round(vw * scale), Math.round(vh * scale));
+      document.getElementById('ct-dims').textContent = vw + ' × ' + vh;
+      state.videoEl = video;
+      state.sourceImage = video;
+      video.play().catch(() => {});
+    }
+
+    if (loopStarted || state.videoEl !== video) return;
+    loopStarted = true;
+    startVideoLoop(video);
+  };
+
+  video.onerror = () => {
+    // Only show error if this is still the active file
+    if (state.fileType !== 'video' || state.videoEl === video || state.file?.name === file.name) {
+      stopVideoLoop();
+      URL.revokeObjectURL(blobUrl);
+      document.getElementById('ct-filename').textContent = 'LOAD FAILED';
+      alert(`Could not play this video.\nBrowsers support: MP4 (H.264), WebM (VP8/VP9).\nFile: ${file.name}`);
+    }
+  };
+
+  // Set src AFTER all handlers are attached
+  video.src = blobUrl;
+  video.load();
+}
+
+function startVideoLoop(video) {
+  _videoLoopRunning = true;
+  _lastFrameTime = 0;
+  const interval = 1000 / VIDEO_TARGET_FPS;
+
+  const loop = (timestamp) => {
+    // Exit if loop was stopped or video replaced
+    if (!_videoLoopRunning || state.videoEl !== video || state.fileType !== 'video') {
+      _videoLoopRunning = false;
+      return;
+    }
+
+    // Throttle to target FPS
+    if (timestamp - _lastFrameTime >= interval) {
+      _lastFrameTime = timestamp;
+      // Only render if video has actual data
+      if (video.readyState >= 2) {
+        processImage();
+      }
+    }
+
+    _rafId = requestAnimationFrame(loop);
+  };
+
+  _rafId = requestAnimationFrame(loop);
 }
 
 function showCanvas(w, h) {
@@ -2441,17 +2560,27 @@ function applyZoom() {
 // ══════════════════════════════════════════════════════
 //  EXPORT MODAL
 // ══════════════════════════════════════════════════════
-let exportState = { fmt: 'png', res: 'source', quality: 92, duration: 5, fps: 30 };
+let exportState = { fmt: 'png', res: 'source', quality: 92 };
 
 function openExportModal() {
   const canvas = document.getElementById('main-canvas');
-  if (!canvas.width) { alert('Nothing to export — process an image first.'); return; }
-  // Update source res label
+  if (!canvas.width) { alert('Nothing to export — load a file first.'); return; }
   document.getElementById('res-source-sub').textContent = canvas.width + ' × ' + canvas.height;
-  // Show/hide video format based on file type
+  const isVideo = state.fileType === 'video';
   const mp4Btn = document.getElementById('fmt-mp4');
-  mp4Btn.style.opacity = state.fileType === 'video' ? '1' : '0.35';
-  mp4Btn.title = state.fileType !== 'video' ? 'Load a video to enable MP4 export' : '';
+  mp4Btn.style.opacity = isVideo ? '1' : '0.35';
+  mp4Btn.style.pointerEvents = isVideo ? '' : 'none';
+  mp4Btn.title = isVideo ? '' : 'Load a video to enable MP4 export';
+  // If MP4 was selected but now it's an image, reset to PNG
+  if (!isVideo && exportState.fmt === 'mp4') {
+    exportState.fmt = 'png';
+    document.querySelectorAll('.exp-fmt[data-fmt]').forEach(b => {
+      b.classList.toggle('active', b.dataset.fmt === 'png');
+    });
+    document.getElementById('exp-mp4-row').style.display = 'none';
+    document.getElementById('exp-quality-row').style.display = 'none';
+  }
+  resetExportUI();
   document.getElementById('export-modal').classList.add('open');
 }
 
@@ -2468,7 +2597,8 @@ function resetExportUI() {
 }
 
 function selectFmt(btn) {
-  document.querySelectorAll('.exp-fmt').forEach(b => b.classList.remove('active'));
+  if (btn.dataset.fmt === 'mp4' && state.fileType !== 'video') return;
+  document.querySelectorAll('.exp-fmt[data-fmt]').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
   exportState.fmt = btn.dataset.fmt;
   document.getElementById('exp-quality-row').style.display = exportState.fmt === 'jpg' ? '' : 'none';
@@ -2481,131 +2611,177 @@ function selectRes(btn) {
   exportState.res = btn.dataset.res;
 }
 
-function selectFps(btn) {
-  document.querySelectorAll('#exp-fps-btns .exp-fmt').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  exportState.fps = parseInt(btn.dataset.fps);
-}
-
 function getExportDimensions() {
+  const video = state.videoEl;
   const canvas = document.getElementById('main-canvas');
-  const srcW = canvas.width, srcH = canvas.height;
+  const srcW = video ? video.videoWidth : canvas.width;
+  const srcH = video ? video.videoHeight : canvas.height;
   const aspect = srcW / srcH;
-
-  const presets = { '1080': [1920,1080], '2k': [2560,1440], '4k': [3840,2160] };
   if (exportState.res === 'source') return [srcW, srcH];
-
-  const [pw, ph] = presets[exportState.res];
-  // Fit within preset while keeping aspect ratio
-  if (aspect >= pw/ph) return [pw, Math.round(pw / aspect)];
-  return [Math.round(ph * aspect), ph];
+  const longEdge = { '1080': 1920, '2k': 2560, '4k': 3840 }[exportState.res];
+  if (aspect >= 1) return [longEdge, Math.round(longEdge / aspect)];
+  return [Math.round(longEdge * aspect), longEdge];
 }
 
 async function doExport() {
   const canvas = document.getElementById('main-canvas');
   if (!canvas.width) return;
-
-  const btn = document.getElementById('btn-do-export');
-  btn.disabled = true;
-
+  document.getElementById('btn-do-export').disabled = true;
   if (exportState.fmt === 'mp4') {
     await exportVideo();
   } else {
-    exportStillImage();
+    await exportStillImage();
   }
 }
 
-function exportStillImage() {
+async function exportStillImage() {
   const [tw, th] = getExportDimensions();
-  const srcCanvas = document.getElementById('main-canvas');
-
-  // Render at target resolution
+  const mainCanvas = document.getElementById('main-canvas');
   const out = document.createElement('canvas');
   out.width = tw; out.height = th;
-  const ctx = out.getContext('2d');
-  ctx.drawImage(srcCanvas, 0, 0, tw, th);
+
+  if (state.fileType === 'image' && state.sourceImage) {
+    // Re-render at target resolution for true hi-res output
+    const origW = mainCanvas.width, origH = mainCanvas.height;
+    mainCanvas.width = tw; mainCanvas.height = th;
+    processImage();
+    out.getContext('2d').drawImage(mainCanvas, 0, 0);
+    mainCanvas.width = origW; mainCanvas.height = origH;
+    processImage();
+  } else {
+    out.getContext('2d').drawImage(mainCanvas, 0, 0, tw, th);
+  }
 
   const fmt = exportState.fmt;
   const mime = fmt === 'jpg' ? 'image/jpeg' : 'image/png';
   const quality = parseInt(document.getElementById('exp-quality-slider').value) / 100;
   const ext = fmt === 'jpg' ? 'jpg' : 'png';
-
   const link = document.createElement('a');
   link.download = `risograph_${tw}x${th}.${ext}`;
   link.href = out.toDataURL(mime, quality);
   link.click();
-
   document.getElementById('exp-btn-label').textContent = '✓ SAVED';
   setTimeout(() => { resetExportUI(); closeExportModal(); }, 1200);
 }
 
 async function exportVideo() {
-  if (!state.videoEl && state.fileType !== 'video') {
-    alert('No video source loaded.');
-    resetExportUI();
-    return;
+  const video = state.videoEl;
+  if (!video) { alert('No video loaded.'); resetExportUI(); return; }
+
+  const duration = video.duration;
+  if (!isFinite(duration) || duration <= 0) {
+    alert('Cannot determine video duration. Try a different file.');
+    resetExportUI(); return;
   }
 
   const [tw, th] = getExportDimensions();
-  const duration = parseInt(document.getElementById('exp-duration-slider').value);
-  const fps = exportState.fps;
-  const totalFrames = duration * fps;
 
   document.getElementById('exp-progress-wrap').style.display = '';
-  document.getElementById('exp-progress-label').textContent = 'Encoding frames…';
+  document.getElementById('exp-progress-label').textContent = 'Starting encoder…';
   document.getElementById('exp-btn-label').textContent = 'ENCODING…';
 
-  // Create off-screen render canvas at target res
   const offCanvas = document.createElement('canvas');
   offCanvas.width = tw; offCanvas.height = th;
+  const offCtx = offCanvas.getContext('2d');
 
-  // Set up MediaRecorder
-  let stream, recorder, chunks = [];
+  const mimeTypes = [
+    'video/mp4;codecs=avc1', 'video/mp4',
+    'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm',
+  ];
+  let chosenMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  if (!chosenMime) {
+    alert('No supported video encoder found. Try Chrome or Edge.');
+    resetExportUI(); return;
+  }
+  const ext = chosenMime.startsWith('video/mp4') ? 'mp4' : 'webm';
+
+  let chunks = [];
+  let recorder;
   try {
-    stream = offCanvas.captureStream(fps);
-    const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-      ? 'video/webm;codecs=vp9'
-      : 'video/webm';
-    recorder = new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 8_000_000 });
+    recorder = new MediaRecorder(offCanvas.captureStream(30), {
+      mimeType: chosenMime,
+      videoBitsPerSecond: 12_000_000
+    });
   } catch(e) {
-    alert('MediaRecorder not supported in this browser. Try Chrome or Edge.');
+    alert('Failed to start encoder: ' + e.message);
     resetExportUI(); return;
   }
 
   recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
   recorder.onstop = () => {
-    const blob = new Blob(chunks, { type: 'video/webm' });
+    // Download the result
+    const blob = new Blob(chunks, { type: chosenMime });
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.download = `risograph_${tw}x${th}_${fps}fps.webm`;
-    link.href = url;
-    link.click();
-    URL.revokeObjectURL(url);
-    document.getElementById('exp-btn-label').textContent = '✓ SAVED';
-    document.getElementById('exp-progress-label').textContent = 'Done!';
+    const a = document.createElement('a');
+    a.download = `risograph_${tw}x${th}.${ext}`;
+    a.href = url;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+
     document.getElementById('exp-progress-fill').style.width = '100%';
-    setTimeout(() => { resetExportUI(); closeExportModal(); }, 1400);
+    document.getElementById('exp-progress-label').textContent = 'Done!';
+    document.getElementById('exp-btn-label').textContent = '✓ SAVED';
+
+    // Restore canvas to preview size and restart live loop
+    const mainCanvas = document.getElementById('main-canvas');
+    const vw = video.videoWidth;
+    const vh = video.videoHeight;
+    const scale = Math.min(1, VIDEO_PREVIEW_MAX / Math.max(vw, vh));
+    mainCanvas.width = Math.round(vw * scale);
+    mainCanvas.height = Math.round(vh * scale);
+
+    // Restore video state and restart loop
+    state.videoEl = video;
+    state.sourceImage = video;
+    state.fileType = 'video';
+    video.currentTime = 0;
+    video.play().catch(() => {});
+    startVideoLoop(video);
+
+    setTimeout(() => { resetExportUI(); closeExportModal(); }, 1800);
   };
 
-  recorder.start();
+  // Stop preview loop — but keep video element alive (don't call stopVideoLoop)
+  _videoLoopRunning = false;
+  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
+  video.pause();
 
-  // Draw frames
-  const offCtx = offCanvas.getContext('2d');
+  // Resize main canvas to export resolution
   const mainCanvas = document.getElementById('main-canvas');
-  const srcCanvas = document.createElement('canvas');
-  srcCanvas.width = tw; srcCanvas.height = th;
+  mainCanvas.width = tw; mainCanvas.height = th;
+  state.sourceImage = video;
+
+  // Seek to start and wait
+  video.currentTime = 0;
+  await new Promise(r => {
+    const onSeeked = () => { video.removeEventListener('seeked', onSeeked); r(); };
+    video.addEventListener('seeked', onSeeked);
+    setTimeout(r, 800);
+  });
+
+  recorder.start(200);
+
+  const fps = 30;
+  const frameInterval = 1 / fps;
+  const totalFrames = Math.ceil(duration * fps);
 
   for (let f = 0; f < totalFrames; f++) {
-    // Draw current processed frame scaled to target
-    offCtx.drawImage(mainCanvas, 0, 0, tw, th);
-    // Advance video time if video source
-    if (state.videoEl) {
-      const t = (f / totalFrames) * (state.videoEl.duration || duration);
-      state.videoEl.currentTime = isFinite(t) ? t : 0;
-    }
-    document.getElementById('exp-progress-fill').style.width = ((f+1)/totalFrames*100) + '%';
-    document.getElementById('exp-progress-label').textContent = `Frame ${f+1} / ${totalFrames}`;
-    await new Promise(r => setTimeout(r, 1000 / fps));
+    const t = f * frameInterval;
+    video.currentTime = Math.min(t, duration - 0.01);
+    await new Promise(r => {
+      const onSeeked = () => { video.removeEventListener('seeked', onSeeked); r(); };
+      video.addEventListener('seeked', onSeeked);
+      setTimeout(r, 120);
+    });
+
+    processImage();
+    offCtx.drawImage(mainCanvas, 0, 0);
+
+    const pct = Math.round(((f + 1) / totalFrames) * 100);
+    document.getElementById('exp-progress-fill').style.width = pct + '%';
+    document.getElementById('exp-progress-label').textContent = `Frame ${f+1} / ${totalFrames}  (${pct}%)`;
+    await new Promise(r => setTimeout(r, 0));
   }
 
   recorder.stop();

@@ -2659,118 +2659,150 @@ async function exportVideo() {
 
   const duration = video.duration;
   if (!isFinite(duration) || duration <= 0) {
-    alert('Cannot determine video duration. Try a different file.');
-    resetExportUI(); return;
+    alert('Cannot determine video duration.'); resetExportUI(); return;
   }
 
   const [tw, th] = getExportDimensions();
 
   document.getElementById('exp-progress-wrap').style.display = '';
-  document.getElementById('exp-progress-label').textContent = 'Starting encoder…';
+  document.getElementById('exp-progress-label').textContent = 'Setting up encoder…';
   document.getElementById('exp-btn-label').textContent = 'ENCODING…';
 
-  const offCanvas = document.createElement('canvas');
-  offCanvas.width = tw; offCanvas.height = th;
-  const offCtx = offCanvas.getContext('2d');
-
-  const mimeTypes = [
-    'video/mp4;codecs=avc1', 'video/mp4',
-    'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm',
-  ];
-  let chosenMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  // Pick best mime
+  const mimeTypes = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  const chosenMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
   if (!chosenMime) {
-    alert('No supported video encoder found. Try Chrome or Edge.');
+    alert('No video encoder available in this browser. Try Chrome or Edge.');
     resetExportUI(); return;
   }
-  const ext = chosenMime.startsWith('video/mp4') ? 'mp4' : 'webm';
 
-  let chunks = [];
-  let recorder;
+  // Render canvas at export resolution
+  const renderCanvas = document.createElement('canvas');
+  renderCanvas.width = tw; renderCanvas.height = th;
+
+  // Capture stream from render canvas
+  let recorder, chunks = [];
   try {
-    recorder = new MediaRecorder(offCanvas.captureStream(30), {
-      mimeType: chosenMime,
-      videoBitsPerSecond: 12_000_000
-    });
+    const stream = renderCanvas.captureStream(30);
+    recorder = new MediaRecorder(stream, { mimeType: chosenMime, videoBitsPerSecond: 10_000_000 });
   } catch(e) {
-    alert('Failed to start encoder: ' + e.message);
-    resetExportUI(); return;
+    alert('Encoder failed to start: ' + e.message); resetExportUI(); return;
   }
 
   recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
   recorder.onstop = () => {
+    // Build download
     const blob = new Blob(chunks, { type: chosenMime });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.download = `risograph_${tw}x${th}.${ext}`;
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.download = `risograph_${tw}x${th}.webm`;
     a.href = url;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 5000);
+    setTimeout(() => URL.revokeObjectURL(url), 6000);
 
     document.getElementById('exp-progress-fill').style.width = '100%';
-    document.getElementById('exp-progress-label').textContent = 'Done!';
+    document.getElementById('exp-progress-label').textContent = 'Done! Saved as .webm';
     document.getElementById('exp-btn-label').textContent = '✓ SAVED';
 
-    // Restore canvas to preview size and restart live loop
-    const mainCanvas = document.getElementById('main-canvas');
-    const vw = video.videoWidth;
-    const vh = video.videoHeight;
-    const scale = Math.min(1, VIDEO_MAX_DIM / Math.max(vw, vh));
-    mainCanvas.width  = Math.round(vw * scale);
-    mainCanvas.height = Math.round(vh * scale);
-
-    state.videoEl     = video;
-    state.sourceImage = video;
-    state.fileType    = 'video';
-    video.currentTime = 0;
+    // Restore preview
+    const mc = document.getElementById('main-canvas');
+    const scale = Math.min(1, VIDEO_MAX_DIM / Math.max(video.videoWidth, video.videoHeight));
+    mc.width  = Math.round(video.videoWidth  * scale);
+    mc.height = Math.round(video.videoHeight * scale);
+    state.videoEl = video; state.sourceImage = video; state.fileType = 'video';
+    video.loop = true;
     video.play().then(() => startVideoRender(video)).catch(() => {});
-
-    setTimeout(() => { resetExportUI(); closeExportModal(); }, 1800);
+    setTimeout(() => { resetExportUI(); closeExportModal(); }, 2000);
   };
 
-  // Pause the live loop without destroying the video element
+  // Stop live preview without destroying video
   _videoLoopActive = false;
-  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
-  video.pause();
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
 
-  // Resize main canvas to export resolution
-  const mainCanvas = document.getElementById('main-canvas');
-  mainCanvas.width = tw; mainCanvas.height = th;
+  // Swap main canvas to export size while encoding
+  const mc = document.getElementById('main-canvas');
+  const prevW = mc.width, prevH = mc.height;
+  mc.width = tw; mc.height = th;
   state.sourceImage = video;
 
-  // Seek to start and wait
+  // Seek to beginning
+  video.pause();
   video.currentTime = 0;
-  await new Promise(r => {
-    const onSeeked = () => { video.removeEventListener('seeked', onSeeked); r(); };
-    video.addEventListener('seeked', onSeeked);
-    setTimeout(r, 800);
+  video.loop = false;
+  await new Promise(r => setTimeout(r, 300)); // brief settle
+
+  recorder.start(250);
+
+  document.getElementById('exp-progress-label').textContent = 'Recording… (plays through once)';
+
+  // Play video forward in real time, render each frame
+  // Use timeupdate event (fires ~4-6x per second) for progress,
+  // but render via rAF for smooth capture
+  let exportDone = false;
+
+  await new Promise(resolve => {
+    let localRaf = null;
+
+    const renderFrame = () => {
+      if (exportDone) return;
+
+      // Render riso frame into main canvas, copy to render canvas
+      if (video.readyState >= 2) {
+        processImage();
+        renderCanvas.getContext('2d').drawImage(mc, 0, 0);
+      }
+
+      // Update progress
+      const pct = Math.min(99, Math.round((video.currentTime / duration) * 100));
+      document.getElementById('exp-progress-fill').style.width = pct + '%';
+      document.getElementById('exp-progress-label').textContent =
+        `Encoding… ${Math.floor(video.currentTime)}s / ${Math.floor(duration)}s`;
+
+      localRaf = requestAnimationFrame(renderFrame);
+    };
+
+    // Video ended — we're done
+    const onEnded = () => {
+      exportDone = true;
+      if (localRaf) cancelAnimationFrame(localRaf);
+      video.removeEventListener('ended', onEnded);
+      // Render one last frame
+      if (video.readyState >= 2) {
+        processImage();
+        renderCanvas.getContext('2d').drawImage(mc, 0, 0);
+      }
+      setTimeout(() => { recorder.stop(); resolve(); }, 300);
+    };
+
+    // Safety timeout — if video somehow never ends, stop after duration + 5s
+    const safetyMs = (duration + 5) * 1000;
+    const safetyTimer = setTimeout(() => {
+      if (!exportDone) {
+        exportDone = true;
+        if (localRaf) cancelAnimationFrame(localRaf);
+        video.removeEventListener('ended', onEnded);
+        recorder.stop();
+        resolve();
+      }
+    }, safetyMs);
+
+    video.addEventListener('ended', onEnded);
+
+    // Start rendering and playing simultaneously
+    localRaf = requestAnimationFrame(renderFrame);
+    video.play().catch(err => {
+      console.warn('Export play failed:', err);
+      clearTimeout(safetyTimer);
+      exportDone = true;
+      if (localRaf) cancelAnimationFrame(localRaf);
+      recorder.stop();
+      resolve();
+    });
   });
 
-  recorder.start(200);
-
-  const fps = 30;
-  const frameInterval = 1 / fps;
-  const totalFrames = Math.ceil(duration * fps);
-
-  for (let f = 0; f < totalFrames; f++) {
-    const t = f * frameInterval;
-    video.currentTime = Math.min(t, duration - 0.01);
-    await new Promise(r => {
-      const onSeeked = () => { video.removeEventListener('seeked', onSeeked); r(); };
-      video.addEventListener('seeked', onSeeked);
-      setTimeout(r, 120);
-    });
-
-    processImage();
-    offCtx.drawImage(mainCanvas, 0, 0);
-
-    const pct = Math.round(((f + 1) / totalFrames) * 100);
-    document.getElementById('exp-progress-fill').style.width = pct + '%';
-    document.getElementById('exp-progress-label').textContent = `Frame ${f+1} / ${totalFrames}  (${pct}%)`;
-    await new Promise(r => setTimeout(r, 0));
-  }
-
-  recorder.stop();
+  // Restore main canvas preview size
+  mc.width = prevW; mc.height = prevH;
 }
 
 // ══════════════════════════════════════════════════════
@@ -2863,26 +2895,26 @@ const BUILTIN_PRESETS = [
   {
     id: 'summer-zine',
     name: 'Summer Zine',
-    desc: 'Hot pink · yellow · stochastic',
+    desc: 'Hot pink · yellow · red · stochastic',
     colors: ['#FF48B0', '#FFE800', '#F15060'],
-    opacities: [0.95, 0.85, 0.9],
+    opacities: [1.0, 0.9, 0.95],
     colorCount: 3,
     blendMode: 'multiply',
-    opacity: 88,
-    tint: 75,
+    opacity: 92,
+    tint: 88,
     densityMode: 'auto',
     lpi: 65,
-    dotsize: 55,
+    dotsize: 60,
     pattern: 'stochastic',
     halftoneAngle: 45,
     misregX: 2,
     misregY: 1,
-    bleed: 25,
+    bleed: 22,
     overink: 18,
     grain: 28,
-    scanner: 8,
+    scanner: 6,
     paper: 'cream',
-    paperAmount: 55,
+    paperAmount: 45,
   },
   {
     id: 'punk-noir',
@@ -2893,34 +2925,34 @@ const BUILTIN_PRESETS = [
     colorCount: 2,
     blendMode: 'multiply',
     opacity: 95,
-    tint: 80,
+    tint: 90,
     densityMode: 'manual',
     lpi: 42,
-    dotsize: 70,
+    dotsize: 75,
     pattern: 'crosshatch',
     halftoneAngle: 45,
     misregX: 3,
     misregY: -2,
-    bleed: 35,
-    overink: 30,
-    grain: 45,
-    scanner: 20,
+    bleed: 30,
+    overink: 28,
+    grain: 40,
+    scanner: 18,
     paper: 'rough',
-    paperAmount: 72,
+    paperAmount: 65,
   },
   {
     id: 'ocean-dream',
     name: 'Ocean Dream',
     desc: 'Teal · blue · medium blue · dot',
     colors: ['#00A99D', '#3255A4', '#4D80C8'],
-    opacities: [0.9, 0.85, 0.8],
+    opacities: [1.0, 0.95, 0.9],
     colorCount: 3,
-    blendMode: 'screen',
-    opacity: 82,
-    tint: 65,
+    blendMode: 'multiply',
+    opacity: 90,
+    tint: 88,
     densityMode: 'manual',
-    lpi: 75,
-    dotsize: 40,
+    lpi: 55,
+    dotsize: 65,
     pattern: 'dot',
     halftoneAngle: 15,
     misregX: 1,
@@ -2928,57 +2960,57 @@ const BUILTIN_PRESETS = [
     bleed: 15,
     overink: 10,
     grain: 20,
-    scanner: 5,
+    scanner: 4,
     paper: 'white',
     paperAmount: 30,
   },
   {
     id: 'botanical',
     name: 'Botanical',
-    desc: 'Green · yellow · teal · line',
+    desc: 'Green · yellow · teal · black · line',
     colors: ['#56A149', '#FFE800', '#00A99D', '#212121'],
-    opacities: [0.9, 0.8, 0.85, 0.7],
+    opacities: [1.0, 0.9, 0.9, 0.75],
     colorCount: 4,
     blendMode: 'multiply',
-    opacity: 85,
-    tint: 70,
+    opacity: 90,
+    tint: 88,
     densityMode: 'manual',
-    lpi: 60,
-    dotsize: 45,
+    lpi: 55,
+    dotsize: 60,
     pattern: 'line',
     halftoneAngle: 75,
     misregX: 0,
     misregY: 2,
-    bleed: 20,
+    bleed: 18,
     overink: 12,
-    grain: 35,
-    scanner: 6,
+    grain: 32,
+    scanner: 5,
     paper: 'kraft',
-    paperAmount: 60,
+    paperAmount: 55,
   },
   {
     id: 'psychedelic',
     name: 'Psychedelic',
-    desc: 'Purple · pink · yellow · diffusion',
+    desc: 'Purple · pink · yellow · stochastic',
     colors: ['#7B5EA7', '#FF48B0', '#FFE800'],
-    opacities: [0.92, 0.88, 0.9],
+    opacities: [1.0, 0.95, 0.9],
     colorCount: 3,
-    blendMode: 'overlay',
-    opacity: 90,
-    tint: 80,
+    blendMode: 'multiply',
+    opacity: 92,
+    tint: 88,
     densityMode: 'auto',
-    lpi: 65,
-    dotsize: 60,
-    pattern: 'diffusion',
+    lpi: 60,
+    dotsize: 65,
+    pattern: 'stochastic',
     halftoneAngle: 45,
     misregX: 4,
     misregY: -3,
-    bleed: 30,
-    overink: 22,
+    bleed: 25,
+    overink: 20,
     grain: 25,
-    scanner: 12,
+    scanner: 10,
     paper: 'cream',
-    paperAmount: 45,
+    paperAmount: 40,
   },
   {
     id: 'propaganda',
@@ -2988,21 +3020,21 @@ const BUILTIN_PRESETS = [
     opacities: [1.0, 0.95, 0.9],
     colorCount: 3,
     blendMode: 'multiply',
-    opacity: 92,
-    tint: 85,
+    opacity: 95,
+    tint: 90,
     densityMode: 'manual',
-    lpi: 50,
-    dotsize: 65,
+    lpi: 45,
+    dotsize: 70,
     pattern: 'dot',
     halftoneAngle: 45,
     misregX: -3,
     misregY: 3,
-    bleed: 28,
-    overink: 25,
-    grain: 40,
-    scanner: 15,
+    bleed: 25,
+    overink: 22,
+    grain: 38,
+    scanner: 14,
     paper: 'rough',
-    paperAmount: 65,
+    paperAmount: 60,
   },
 ];
 

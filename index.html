@@ -1489,9 +1489,18 @@ canvas {
         <div class="section-body">
           <div class="chip-row" id="paper-chips">
             <div class="chip active" onclick="selectChip(this,'paper','white')">Uncoated White</div>
-            <div class="chip" onclick="selectChip(this,'paper','cream')">Cream Off-White</div>
+            <div class="chip" id="chip-custom-paper" onclick="selectCustomPaper()">Custom ▾</div>
             <div class="chip" onclick="selectChip(this,'paper','kraft')">Kraft / Recycled</div>
             <div class="chip" onclick="selectChip(this,'paper','rough')">Rough Textured</div>
+          </div>
+          <div class="hex-input-row" id="custom-paper-row" style="margin-bottom:8px">
+            <div class="hex-swatch-preview" id="paper-color-preview" style="background:#F2E8CF"></div>
+            <input class="hex-input" type="text" id="paper-hex-input" value="F2E8CF" maxlength="6"
+                   placeholder="Paper colour HEX" oninput="updatePaperHexPreview(this)">
+            <input type="color" id="paper-color-picker" value="#F2E8CF"
+                   style="width:22px;height:22px;border:none;background:none;cursor:pointer;padding:0;border-radius:3px"
+                   oninput="onPaperColorPick(this.value)" onchange="onPaperColorPick(this.value)">
+            <button class="hex-set-btn" onclick="applyPaperHex()">SET</button>
           </div>
           <div class="slider-row">
             <div class="slider-meta">
@@ -1507,8 +1516,8 @@ canvas {
     </div><!-- end scroll -->
 
     <div id="panel-actions">
-      <button class="btn-reset" onclick="resetAll()" title="Reset all settings">↺</button>
-      <button class="btn-process" onclick="processImage()">▶ PRINT</button>
+      <button class="btn-reset" onclick="resetAll()" title="Reset all settings to defaults">↺</button>
+      <button class="btn-process" onclick="processImage()" title="Re-render the effect">▶ RENDER</button>
       <button class="btn-export" onclick="openExportModal()">EXPORT ▾</button>
     </div>
   </div><!-- end panel -->
@@ -1655,11 +1664,12 @@ const PAPER_COLORS = {
   cream: '#F2E8CF',
   kraft: '#C4A87A',
   rough: '#E8DEC8',
+  custom: '#F2E8CF', // default off-white until user picks
 };
 
 let state = {
   file: null,
-  fileType: 'image', // or 'video'
+  fileType: 'image',
   lowQuality: false,
   colorCount: 3,
   colors: ['#FF48B0', '#3255A4', '#FFE800'],
@@ -1679,6 +1689,7 @@ let state = {
   grain: 30,
   scanner: 10,
   paper: 'white',
+  paperCustomColor: '#F2E8CF',
   paperAmount: 40,
   zoom: 1.0,
   sourceImage: null,
@@ -2054,7 +2065,9 @@ function processImage() {
   const H = canvas.height;
 
   // ── 1. Paper background ─────────────────────────────
-  const paperCol = PAPER_COLORS[state.paper] || '#F5F2EC';
+  const paperCol = state.paper === 'custom'
+    ? state.paperCustomColor
+    : (PAPER_COLORS[state.paper] || '#F5F2EC');
   ctx.fillStyle = paperCol;
   ctx.fillRect(0, 0, W, H);
   if (state.paperAmount > 0) {
@@ -2113,55 +2126,99 @@ function processImage() {
 }
 
 // ── CHANNEL LUMINANCE ──────────────────────────────────
-// Separates the image into N ink channels properly.
-// Strategy: convert source to Lab-like space, assign each pixel's
-// density to each channel weighted by how close the pixel color is
-// to that ink color vs all other inks (competitive assignment).
+// Each channel gets the full image luminance, weighted by how much
+// that pixel's colour "wants" to be printed in this ink.
+// Strategy: for each pixel, compute colour distance to each ink in HSL space.
+// The closest ink gets the strongest density. For black ink (very dark), 
+// it gets the shadow/dark areas that no coloured ink claims strongly.
 function getChannelLuminance(srcData, channelIdx, allInkColors, W, H) {
   const lum = new Float32Array(W * H);
   const d = srcData.data;
   const N = allInkColors.length;
 
-  // Normalize all ink colors once
-  const inks = allInkColors.map(c => ({ r: c.r/255, g: c.g/255, b: c.b/255 }));
-  const myInk = inks[channelIdx];
+  // Pre-convert all inks to HSL for better perceptual distance
+  function rgbToHsl(r, g, b) {
+    const max = Math.max(r,g,b), min = Math.min(r,g,b);
+    const l = (max + min) / 2;
+    if (max === min) return [0, 0, l];
+    const s = l > 0.5 ? (max-min)/(2-max-min) : (max-min)/(max+min);
+    let h;
+    if (max === r)      h = (g-b)/(max-min) + (g < b ? 6 : 0);
+    else if (max === g) h = (b-r)/(max-min) + 2;
+    else                h = (r-g)/(max-min) + 4;
+    return [h/6, s, l];
+  }
+
+  const inkHSL = allInkColors.map(c => rgbToHsl(c.r/255, c.g/255, c.b/255));
+  const myHSL  = inkHSL[channelIdx];
+
+  // Is this ink very dark (black/near-black)?
+  const myLightness  = myHSL[2];
+  const myIsVeryDark = myLightness < 0.18;
+  const mySaturation = myHSL[1];
 
   for (let i = 0; i < W * H; i++) {
     const r = d[i*4]   / 255;
     const g = d[i*4+1] / 255;
     const b = d[i*4+2] / 255;
 
-    // Overall perceptual luminance → ink density (dark = more ink)
+    // Perceptual luminance — dark pixels = more ink
     const luma = 1 - (r * 0.299 + g * 0.587 + b * 0.114);
+    if (luma < 0.025) { lum[i] = 0; continue; }
 
-    if (luma < 0.03) { lum[i] = 0; continue; }
+    if (N === 1) { lum[i] = luma; continue; }
 
-    if (N === 1) {
-      lum[i] = luma;
-      continue;
+    const [pH, pS, pL] = rgbToHsl(r, g, b);
+    const pixelIsDark  = pL < 0.3;
+    const pixelIsLight = pL > 0.7;
+
+    let weight;
+
+    if (myIsVeryDark) {
+      // Dark/black ink: claim dark pixels that coloured inks don't want
+      // Compute how well any coloured ink matches this pixel
+      let maxColorAffinity = 0;
+      for (let j = 0; j < N; j++) {
+        if (j === channelIdx) continue;
+        const [jH, jS, jL] = inkHSL[j];
+        if (jL < 0.18) continue; // skip other dark inks
+        // Hue distance (circular)
+        const hDiff = Math.abs(pH - jH);
+        const hDist = Math.min(hDiff, 1 - hDiff);
+        const affinity = (1 - hDist * 2) * pS * jS;
+        if (affinity > maxColorAffinity) maxColorAffinity = affinity;
+      }
+      // Black gets what coloured inks don't claim + all very dark areas
+      weight = Math.max(0, 1 - maxColorAffinity * 1.5) * (pixelIsDark ? 1.2 : 0.7);
+    } else {
+      // Coloured ink: claim pixels whose hue is close to this ink's hue
+      // Hue distance (circular, 0..0.5)
+      const hDiff    = Math.abs(pH - myHSL[0]);
+      const hDist    = Math.min(hDiff, 1 - hDiff); // 0=same, 0.5=opposite
+      // Saturation factor: unsaturated pixels distribute evenly
+      const satFactor = 0.3 + pS * 0.7;
+      // Hue affinity: 1 when hue matches perfectly, 0 when opposite
+      const hAffinity = Math.max(0, 1 - hDist * 3.0);
+      // Compete against other coloured inks
+      let totalAffinity = 0.001;
+      let myAffinity    = hAffinity * satFactor;
+      for (let j = 0; j < N; j++) {
+        if (j === channelIdx) continue;
+        const [jH, jS, jL] = inkHSL[j];
+        if (jL < 0.18) continue; // skip dark inks
+        const jHDiff    = Math.abs(pH - jH);
+        const jHDist    = Math.min(jHDiff, 1 - jHDiff);
+        const jAffinity = Math.max(0, 1 - jHDist * 3.0) * (0.3 + pS * 0.7);
+        totalAffinity  += jAffinity;
+      }
+      totalAffinity += myAffinity;
+      // Normalised share — each colour claims its proportional hue territory
+      weight = (myAffinity / totalAffinity) * Math.sqrt(N);
+      // Dark pixels go to all colour channels proportionally (riso shadows)
+      if (pixelIsDark) weight *= 0.6;
     }
 
-    // Distance from pixel to each ink color in RGB space
-    // Closer ink = gets more of this pixel's density
-    const dists = inks.map(ink => {
-      const dr = r - ink.r, dg = g - ink.g, db = b - ink.b;
-      return Math.sqrt(dr*dr + dg*dg + db*db);
-    });
-
-    const myDist = dists[channelIdx];
-    const minDist = Math.min(...dists);
-    const maxDist = Math.max(...dists) || 0.001;
-
-    // Softmax-style: channel gets full weight if it's the closest ink,
-    // partial weight based on proximity, zero if it's the farthest
-    // This creates clean separation without hard cutoffs
-    const invDists = dists.map(d => maxDist - d); // invert: closer = higher
-    const sumInv = invDists.reduce((s, v) => s + v, 0) || 0.001;
-    const weight = invDists[channelIdx] / sumInv;
-
-    // Each channel gets its weighted share of total luma
-    // Multiply by N so total across all channels ≈ original luma
-    lum[i] = Math.min(1, luma * weight * Math.sqrt(N));
+    lum[i] = Math.min(1, luma * Math.max(0, weight));
   }
   return lum;
 }
@@ -3038,6 +3095,52 @@ const BUILTIN_PRESETS = [
   },
 ];
 
+// ── PAPER COLOR PICKER ─────────────────────────────────
+function selectCustomPaper() {
+  // Activate the custom chip
+  document.querySelectorAll('#paper-chips .chip').forEach(c => c.classList.remove('active'));
+  document.getElementById('chip-custom-paper').classList.add('active');
+  state.paper = 'custom';
+  PAPER_COLORS.custom = state.paperCustomColor;
+  document.getElementById('sb-paper').textContent = 'Custom';
+  if (state.sourceImage) scheduleProcess();
+  // Open the colour picker directly
+  document.getElementById('paper-color-picker').click();
+}
+
+function updatePaperHexPreview(input) {
+  const hex = '#' + input.value.replace('#','').padEnd(6,'0').slice(0,6);
+  document.getElementById('paper-color-preview').style.background = hex;
+  document.getElementById('paper-color-picker').value = hex;
+}
+
+function onPaperColorPick(hexVal) {
+  const hex = hexVal.startsWith('#') ? hexVal : '#' + hexVal;
+  document.getElementById('paper-color-preview').style.background = hex;
+  document.getElementById('paper-hex-input').value = hex.replace('#','').toUpperCase();
+  state.paperCustomColor = hex;
+  PAPER_COLORS.custom = hex;
+  // Auto-activate custom chip
+  document.querySelectorAll('#paper-chips .chip').forEach(c => c.classList.remove('active'));
+  document.getElementById('chip-custom-paper').classList.add('active');
+  state.paper = 'custom';
+  document.getElementById('sb-paper').textContent = 'Custom';
+  if (state.sourceImage) scheduleProcess();
+}
+
+function applyPaperHex() {
+  const val = document.getElementById('paper-hex-input').value.replace('#','');
+  if (val.length < 6) return;
+  onPaperColorPick('#' + val);
+}
+
+// ── STALE PRESET GUARD ─────────────────────────────────
+// Clear old user presets if they were saved with broken settings
+const PRESET_SCHEMA_VER = 'v3';
+if (localStorage.getItem('riso_preset_ver') !== PRESET_SCHEMA_VER) {
+  localStorage.removeItem('riso_user_presets');
+  localStorage.setItem('riso_preset_ver', PRESET_SCHEMA_VER);
+}
 let userPresets = JSON.parse(localStorage.getItem('riso_user_presets') || '[]');
 
 function buildPresetsGrid() {
@@ -3118,12 +3221,27 @@ function applyPreset(preset) {
   const patternNames = { stochastic:'Stochastic', diffusion:'Diffusion', line:'Line', dot:'Dot', crosshatch:'Cross Hatch' };
   document.getElementById('sb-pattern').textContent = patternNames[preset.pattern] || preset.pattern;
 
-  // Paper chips
+  // Paper chips — map legacy 'cream' to custom
+  const resolvedPaper = preset.paper === 'cream' ? 'custom' : preset.paper;
+  state.paper = resolvedPaper;
+  if (resolvedPaper === 'custom') {
+    const customColor = preset.paperColor || '#F2E8CF';
+    state.paperCustomColor = customColor;
+    PAPER_COLORS.custom = customColor;
+    document.getElementById('paper-color-preview').style.background = customColor;
+    document.getElementById('paper-hex-input').value = customColor.replace('#','').toUpperCase();
+    document.getElementById('paper-color-picker').value = customColor;
+  }
   document.querySelectorAll('#paper-chips .chip').forEach(c => {
-    c.classList.toggle('active', c.getAttribute('onclick').includes(`'${preset.paper}'`));
+    const onclick = c.getAttribute('onclick') || '';
+    c.classList.toggle('active',
+      resolvedPaper === 'custom'
+        ? c.id === 'chip-custom-paper'
+        : onclick.includes(`'${resolvedPaper}'`)
+    );
   });
-  const paperNames = { white:'Uncoated White', cream:'Cream Off-White', kraft:'Kraft / Recycled', rough:'Rough Textured' };
-  document.getElementById('sb-paper').textContent = paperNames[preset.paper] || preset.paper;
+  const paperNames = { white:'Uncoated White', custom:'Custom', kraft:'Kraft / Recycled', rough:'Rough Textured' };
+  document.getElementById('sb-paper').textContent = paperNames[resolvedPaper] || resolvedPaper;
 
   // Misreg pad
   const pad = document.getElementById('misreg-pad');

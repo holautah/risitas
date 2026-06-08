@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RISO — Risograph Emulator</title>
+<title>Risitas</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Space+Mono:ital,wght@0,400;0,700;1,400&family=Barlow+Condensed:wght@300;400;500;600;700;900&family=Courier+Prime:wght@400;700&display=swap');
 
@@ -1268,8 +1268,8 @@ canvas {
   <!-- ══ CONTROL PANEL ══════════════════════════════════ -->
   <div id="panel">
     <div id="panel-header">
-      <div class="logo"><span>RISO</span>GRAPH</div>
-      <div class="subtitle">Spot Color Emulator v1.0</div>
+      <div class="logo"><span>RISI</span>TAS</div>
+      <div class="subtitle">Risograph Color Emulator</div>
     </div>
 
     <div id="panel-scroll">
@@ -2703,7 +2703,7 @@ async function exportStillImage() {
   const quality = parseInt(document.getElementById('exp-quality-slider').value) / 100;
   const ext = fmt === 'jpg' ? 'jpg' : 'png';
   const link = document.createElement('a');
-  link.download = `risograph_${tw}x${th}.${ext}`;
+  link.download = `risitas_${tw}x${th}.${ext}`;
   link.href = out.toDataURL(mime, quality);
   link.click();
   document.getElementById('exp-btn-label').textContent = '✓ SAVED';
@@ -2753,7 +2753,7 @@ async function exportVideo() {
     const blob = new Blob(chunks, { type: chosenMime });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.download = `risograph_${tw}x${th}.webm`;
+    a.download = `risitas_${tw}x${th}.webm`;
     a.href = url;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 6000);

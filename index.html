@@ -1534,7 +1534,7 @@ canvas {
       <div class="exp-format-row" id="exp-format-btns">
         <button class="exp-fmt active" data-fmt="png" onclick="selectFmt(this)">PNG</button>
         <button class="exp-fmt" data-fmt="jpg" onclick="selectFmt(this)">JPG</button>
-        <button class="exp-fmt" data-fmt="mp4" onclick="selectFmt(this)" id="fmt-mp4">MP4</button>
+        <button class="exp-fmt" data-fmt="mp4" onclick="selectFmt(this)" id="fmt-mp4">VIDEO</button>
       </div>
 
       <div class="exp-section-label" style="margin-top:14px">Resolution</div>
@@ -1569,7 +1569,7 @@ canvas {
 
       <!-- MP4 info (no controls needed — exports exact video with effect) -->
       <div id="exp-mp4-row" style="display:none; margin-top:14px">
-        <div class="exp-mp4-note" id="exp-mp4-note">Exports the full uploaded video with the riso effect applied, at the selected resolution.</div>
+        <div class="exp-mp4-note" id="exp-mp4-note">Exports the full video with riso effect. Format depends on browser support.</div>
       </div>
 
       <div id="exp-progress-wrap" style="display:none;margin-top:14px">
@@ -2623,24 +2623,47 @@ function applyZoom() {
 // ══════════════════════════════════════════════════════
 let exportState = { fmt: 'png', res: 'source', quality: 92 };
 
+function _detectVideoMime() {
+  const candidates = [
+    'video/mp4;codecs=avc1.42E01E,mp4a.40.2',
+    'video/mp4;codecs=avc1',
+    'video/mp4',
+    'video/webm;codecs=vp9',
+    'video/webm;codecs=vp8',
+    'video/webm',
+  ];
+  return candidates.find(m => MediaRecorder.isTypeSupported(m)) || 'video/webm';
+}
+
 function openExportModal() {
   const canvas = document.getElementById('main-canvas');
   if (!canvas.width) { alert('Nothing to export — load a file first.'); return; }
   document.getElementById('res-source-sub').textContent = canvas.width + ' × ' + canvas.height;
+
   const isVideo = state.fileType === 'video';
-  const mp4Btn = document.getElementById('fmt-mp4');
-  mp4Btn.style.opacity = isVideo ? '1' : '0.35';
+  const mp4Btn  = document.getElementById('fmt-mp4');
+  mp4Btn.style.opacity       = isVideo ? '1' : '0.35';
   mp4Btn.style.pointerEvents = isVideo ? '' : 'none';
-  mp4Btn.title = isVideo ? '' : 'Load a video to enable MP4 export';
-  // If MP4 was selected but now it's an image, reset to PNG
+  mp4Btn.title = isVideo ? '' : 'Load a video to enable video export';
+
+  if (isVideo) {
+    const mime  = _detectVideoMime();
+    const isMp4 = mime.startsWith('video/mp4');
+    mp4Btn.textContent = isMp4 ? 'MP4' : 'WEBM';
+    document.getElementById('exp-mp4-note').textContent =
+      'Exports full video with riso effect. ' +
+      'Your browser will produce: ' + (isMp4 ? 'MP4 (H.264)' : 'WebM (VP9/VP8)') + '.';
+  }
+
   if (!isVideo && exportState.fmt === 'mp4') {
     exportState.fmt = 'png';
     document.querySelectorAll('.exp-fmt[data-fmt]').forEach(b => {
       b.classList.toggle('active', b.dataset.fmt === 'png');
     });
-    document.getElementById('exp-mp4-row').style.display = 'none';
+    document.getElementById('exp-mp4-row').style.display    = 'none';
     document.getElementById('exp-quality-row').style.display = 'none';
   }
+
   resetExportUI();
   document.getElementById('export-modal').classList.add('open');
 }
@@ -2748,8 +2771,8 @@ async function exportVideo() {
   const exportToken = ++_activeToken;
 
   // Pick encoder
-  const mimes = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
-  const mime  = mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  const mime = _detectVideoMime();
+  const fileExt = mime.startsWith('video/mp4') ? 'mp4' : 'webm';
   if (!mime) {
     alert('No video encoder found. Use Chrome or Edge.'); resetExportUI(); return;
   }
@@ -2787,13 +2810,13 @@ async function exportVideo() {
     const blob = new Blob(chunks, { type: mime });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
-    a.download = `risitas_${tw}x${th}.webm`;
+    a.download = `risitas_${tw}x${th}.${fileExt}`;
     a.href = url;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 8000);
 
     document.getElementById('exp-progress-fill').style.width  = '100%';
-    document.getElementById('exp-progress-label').textContent = '✓ Done — saved as .webm';
+    document.getElementById('exp-progress-label').textContent = `✓ Done — saved as .${fileExt}`;
     document.getElementById('exp-btn-label').textContent      = '✓ SAVED';
 
     // Restart live preview

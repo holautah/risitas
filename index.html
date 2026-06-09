@@ -1866,174 +1866,190 @@ function handleFileInput(e) {
 }
 
 // ── VIDEO / IMAGE MANAGEMENT ───────────────────────────
-let _rafId = null;
+// Single source of truth for what's currently loaded
+let _activeToken = 0;      // incremented on every new load — invalidates stale callbacks
+let _rafId       = null;
 let _videoLoopActive = false;
-let _lastFrameTime = 0;
-const VIDEO_FPS = 20;           // render at 20fps max for performance
-const VIDEO_MAX_DIM = 640;      // downscale preview to max this dimension
 
-// ── STOP / CLEANUP ─────────────────────────────────────
-function stopVideoLoop() {
+const VIDEO_FPS     = 15;    // safe fps for heavy riso processing
+const VIDEO_MAX_DIM = 600;   // max preview dimension
+
+// ── TEARDOWN ───────────────────────────────────────────
+function stopEverything() {
+  _activeToken++;
   _videoLoopActive = false;
-  if (_rafId !== null) { cancelAnimationFrame(_rafId); _rafId = null; }
+  _processing = false;
+
+  if (_rafId !== null) {
+    cancelAnimationFrame(_rafId);
+    _rafId = null;
+  }
+
   if (state.videoEl) {
     const v = state.videoEl;
-    v.onloadedmetadata = null;
-    v.oncanplaythrough = null;
-    v.oncanplay = null;
-    v.onerror = null;
-    v.onseeked = null;
     try { v.pause(); } catch(e) {}
-    const bu = v._blobUrl;
     v.removeAttribute('src');
     try { v.load(); } catch(e) {}
-    if (bu) setTimeout(() => { try { URL.revokeObjectURL(bu); } catch(e){} }, 200);
+    if (document.body.contains(v)) document.body.removeChild(v);
+    const bu = v._blobUrl;
+    if (bu) setTimeout(() => { try { URL.revokeObjectURL(bu); } catch(e){} }, 500);
     state.videoEl = null;
   }
+
   state.sourceImage = null;
 }
 
 // ── LOAD FILE ──────────────────────────────────────────
 function loadFile(file) {
-  stopVideoLoop();
-  state.file = file;
+  stopEverything();
+
+  state.file     = file;
+  state.videoEl  = null;
+  state.sourceImage = null;
+
   document.getElementById('ct-filename').textContent = file.name.toUpperCase();
-  document.getElementById('sb-status').textContent = 'Loading…';
+  document.getElementById('sb-status').textContent   = 'Loading…';
 
   const ext = file.name.split('.').pop().toLowerCase();
-  const videoMime = file.type;
-  // Treat as video if MIME says so OR extension is a known video format
-  const isVideo = videoMime.startsWith('video/') ||
-                  ['mp4','webm','m4v','ogv','ogg'].includes(ext);
 
-  // Explicitly unsupported by browsers (warn, don't try)
+  // Hard block on formats browsers can never play
   if (['mov','avi','mkv','flv','wmv'].includes(ext)) {
-    alert(`⚠️ .${ext.toUpperCase()} is not supported by browsers.\n\nPlease convert to MP4 (H.264) or WebM and re-upload.`);
+    alert(`⚠️  .${ext.toUpperCase()} is not supported by browsers.
+
+Convert to MP4 (H.264) or WebM and re-upload.`);
     document.getElementById('ct-filename').textContent = 'UNSUPPORTED FORMAT';
-    document.getElementById('sb-status').textContent = 'Ready';
+    document.getElementById('sb-status').textContent   = 'Ready';
     return;
   }
 
+  const isVideo = file.type.startsWith('video/') || ['mp4','webm','m4v','ogv','ogg'].includes(ext);
   state.fileType = isVideo ? 'video' : 'image';
-  if (isVideo) loadVideo(file);
-  else         loadImageFile(file);
+
+  if (isVideo) _loadVideo(file, _activeToken);
+  else         _loadImage(file, _activeToken);
 }
 
 // ── LOAD IMAGE ─────────────────────────────────────────
-function loadImageFile(file) {
+function _loadImage(file, token) {
   const reader = new FileReader();
   reader.onload = e => {
     const img = new Image();
     img.onload = () => {
-      if (state.fileType !== 'image') return; // guard: user may have loaded video meanwhile
+      if (_activeToken !== token) return; // superseded by a newer load
+      state.fileType    = 'image';
       state.sourceImage = img;
-      document.getElementById('ct-dims').textContent = img.width + ' × ' + img.height;
+      document.getElementById('ct-dims').textContent   = img.width + ' × ' + img.height;
+      document.getElementById('sb-status').textContent = 'Rendering…';
       showCanvas(img.width, img.height);
       processImage();
-      document.getElementById('sb-status').textContent = 'Processed';
+      document.getElementById('sb-status').textContent = 'Done';
     };
-    img.onerror = () => alert('Could not read image file.');
+    img.onerror = () => { if (_activeToken === token) alert('Could not read image.'); };
     img.src = e.target.result;
   };
   reader.readAsDataURL(file);
 }
 
 // ── LOAD VIDEO ─────────────────────────────────────────
-function loadVideo(file) {
+function _loadVideo(file, token) {
   const blobUrl = URL.createObjectURL(file);
-  const video = document.createElement('video');
+  const video   = document.createElement('video');
 
-  video.muted      = true;
-  video.loop       = true;
-  video.playsInline = true;
-  video.autoplay   = false;   // we control play manually
-  video.preload    = 'auto';
-  video._blobUrl   = blobUrl;
+  video.muted        = true;
+  video.loop         = true;
+  video.playsInline  = true;
+  video.preload      = 'auto';
+  video._blobUrl     = blobUrl;
+  // Append to DOM — required for play() to work in sandboxed iframes
+  video.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;top:-9999px;left:-9999px';
+  document.body.appendChild(video);
 
-  // Show a loading indicator
   document.getElementById('sb-status').textContent = 'Loading video…';
 
-  let started = false; // ensure we only kick off once
-
   function onReady() {
-    if (started) return;
-    if (state.fileType !== 'video') return; // user loaded something else
-    if (!video.videoWidth || !video.videoHeight) return; // dimensions not known yet
-
-    started = true;
+    if (_activeToken !== token) {
+      try { video.pause(); } catch(e) {}
+      if (document.body.contains(video)) document.body.removeChild(video);
+      URL.revokeObjectURL(blobUrl);
+      return;
+    }
 
     const vw = video.videoWidth;
     const vh = video.videoHeight;
+    if (!vw || !vh) return; // not ready yet, wait for next event
+
+    video.removeEventListener('loadedmetadata',  onReady);
+    video.removeEventListener('canplay',         onReady);
+    video.removeEventListener('canplaythrough',  onReady);
+
     const scale = Math.min(1, VIDEO_MAX_DIM / Math.max(vw, vh));
-    const pw = Math.round(vw * scale);
-    const ph = Math.round(vh * scale);
+    const pw    = Math.round(vw * scale);
+    const ph    = Math.round(vh * scale);
 
-    document.getElementById('ct-dims').textContent = `${vw} × ${vh} (preview: ${pw}×${ph})`;
-    showCanvas(pw, ph);
-
-    state.videoEl    = video;
+    state.videoEl     = video;
     state.sourceImage = video;
+    state.fileType    = 'video';
+
+    document.getElementById('ct-dims').textContent = vw + ' x ' + vh + ' (preview ' + pw + 'x' + ph + ')';
+    showCanvas(pw, ph);
 
     video.play()
       .then(() => {
+        if (_activeToken !== token) return;
         document.getElementById('sb-status').textContent = 'Playing';
-        startVideoRender(video);
+        _startVideoLoop(video, token);
       })
-      .catch(err => {
-        // Autoplay blocked — render one static frame and let user interact
-        console.warn('Autoplay blocked, rendering static frame:', err);
-        document.getElementById('sb-status').textContent = 'Click canvas to play';
+      .catch(() => {
+        if (_activeToken !== token) return;
+        // Autoplay blocked — static frame + wait for click
         processImage();
-        // Try playing on user gesture
-        document.getElementById('canvas-container').addEventListener('click', () => {
-          video.play().then(() => startVideoRender(video)).catch(()=>{});
-        }, { once: true });
+        document.getElementById('sb-status').textContent = 'Click canvas to play';
+        document.getElementById('canvas-container').addEventListener('click', function h() {
+          document.getElementById('canvas-container').removeEventListener('click', h);
+          if (_activeToken !== token) return;
+          video.play().then(() => _startVideoLoop(video, token)).catch(() => {});
+        });
       });
   }
 
-  video.addEventListener('loadedmetadata', onReady);
-  video.addEventListener('canplay',        onReady);
-  video.addEventListener('canplaythrough', onReady);
-
   video.addEventListener('error', () => {
-    if (state.fileType !== 'video') return;
-    stopVideoLoop();
+    if (_activeToken !== token) return;
+    if (document.body.contains(video)) document.body.removeChild(video);
     URL.revokeObjectURL(blobUrl);
-    const code = video.error ? video.error.code : '?';
-    const msgs = { 1:'ABORTED', 2:'NETWORK ERROR', 3:'DECODE ERROR', 4:'NOT SUPPORTED' };
-    const reason = msgs[code] || `CODE ${code}`;
+    const code   = video.error ? video.error.code : '?';
+    const labels = {1:'Aborted',2:'Network error',3:'Decode error',4:'Format not supported'};
     document.getElementById('ct-filename').textContent = 'LOAD FAILED';
-    document.getElementById('sb-status').textContent = 'Error';
-    alert(`Video failed to load: ${reason}\n\nMake sure the file is MP4 (H.264) or WebM.\nFile: ${file.name}`);
+    document.getElementById('sb-status').textContent   = 'Error';
+    alert('Video error: ' + (labels[code] || 'code ' + code) + '\nFile: ' + file.name + '\nUse MP4 (H.264) or WebM.');
   });
 
-  // Assign src last — this triggers loading
+  video.addEventListener('loadedmetadata',  onReady);
+  video.addEventListener('canplay',         onReady);
+  video.addEventListener('canplaythrough',  onReady);
+
   video.src = blobUrl;
 }
-
 // ── VIDEO RENDER LOOP ──────────────────────────────────
-function startVideoRender(video) {
-  if (_videoLoopActive) return; // don't double-start
+let _processing = false; // guard: skip frame if previous one still rendering
+
+function _startVideoLoop(video, token) {
   _videoLoopActive = true;
-  _lastFrameTime   = 0;
-  const frameMs    = 1000 / VIDEO_FPS;
+
+  const frameMs = 1000 / VIDEO_FPS;
+  let lastTs = 0;
 
   function loop(ts) {
-    // Stop conditions
-    if (!_videoLoopActive ||
-        state.videoEl !== video ||
-        state.fileType !== 'video' ||
-        video.paused ||
-        video.ended) {
+    if (_activeToken !== token || !_videoLoopActive || state.videoEl !== video) {
       _videoLoopActive = false;
       _rafId = null;
       return;
     }
 
-    if (ts - _lastFrameTime >= frameMs) {
-      _lastFrameTime = ts;
-      if (video.readyState >= 2) { // HAVE_CURRENT_DATA or better
-        processImage();
+    if (ts - lastTs >= frameMs && !_processing) {
+      lastTs = ts;
+      if (!video.paused && !video.ended && video.readyState >= 2) {
+        _processing = true;
+        try { processImage(); } finally { _processing = false; }
       }
     }
 
@@ -2044,14 +2060,13 @@ function startVideoRender(video) {
 }
 
 function showCanvas(w, h) {
-  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('empty-state').style.display  = 'none';
   document.getElementById('canvas-wrapper').style.display = '';
-  const canvas = document.getElementById('main-canvas');
-  canvas.width  = Math.max(1, w);
-  canvas.height = Math.max(1, h);
+  const canvas   = document.getElementById('main-canvas');
+  canvas.width   = Math.max(1, w);
+  canvas.height  = Math.max(1, h);
   resetZoom();
 }
-
 
 // ══════════════════════════════════════════════════════
 //  CORE RISO PROCESSING
@@ -2721,145 +2736,141 @@ async function exportVideo() {
 
   const [tw, th] = getExportDimensions();
 
-  document.getElementById('exp-progress-wrap').style.display = '';
-  document.getElementById('exp-progress-label').textContent = 'Setting up encoder…';
-  document.getElementById('exp-btn-label').textContent = 'ENCODING…';
+  // Show progress UI
+  document.getElementById('exp-progress-wrap').style.display  = '';
+  document.getElementById('exp-progress-label').textContent   = 'Setting up encoder…';
+  document.getElementById('exp-btn-label').textContent        = 'ENCODING…';
 
-  // Pick best mime
-  const mimeTypes = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
-  const chosenMime = mimeTypes.find(m => MediaRecorder.isTypeSupported(m)) || '';
-  if (!chosenMime) {
-    alert('No video encoder available in this browser. Try Chrome or Edge.');
-    resetExportUI(); return;
+  // Pause live preview loop (keep video element alive)
+  _videoLoopActive = false;
+  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
+  // Freeze token so no stale loop restarts
+  const exportToken = ++_activeToken;
+
+  // Pick encoder
+  const mimes = ['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];
+  const mime  = mimes.find(m => MediaRecorder.isTypeSupported(m)) || '';
+  if (!mime) {
+    alert('No video encoder found. Use Chrome or Edge.'); resetExportUI(); return;
   }
 
-  // Render canvas at export resolution
-  const renderCanvas = document.createElement('canvas');
-  renderCanvas.width = tw; renderCanvas.height = th;
+  // Off-screen canvas at export resolution — MediaRecorder captures this
+  const capCanvas = document.createElement('canvas');
+  capCanvas.width  = tw;
+  capCanvas.height = th;
+  const capCtx = capCanvas.getContext('2d');
 
-  // Capture stream from render canvas
+  // Main canvas resized for export rendering
+  const mc    = document.getElementById('main-canvas');
+  const origW = mc.width, origH = mc.height;
+  mc.width  = tw;
+  mc.height = th;
+  state.sourceImage = video;
+
   let recorder, chunks = [];
   try {
-    const stream = renderCanvas.captureStream(30);
-    recorder = new MediaRecorder(stream, { mimeType: chosenMime, videoBitsPerSecond: 10_000_000 });
+    recorder = new MediaRecorder(capCanvas.captureStream(30),
+      { mimeType: mime, videoBitsPerSecond: 8_000_000 });
   } catch(e) {
-    alert('Encoder failed to start: ' + e.message); resetExportUI(); return;
+    mc.width = origW; mc.height = origH;
+    alert('Encoder start failed: ' + e.message); resetExportUI(); return;
   }
 
   recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
 
   recorder.onstop = () => {
-    // Build download
-    const blob = new Blob(chunks, { type: chosenMime });
+    // Restore preview canvas
+    mc.width  = origW;
+    mc.height = origH;
+
+    // Download file
+    const blob = new Blob(chunks, { type: mime });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
     a.download = `risitas_${tw}x${th}.webm`;
     a.href = url;
     a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 6000);
+    setTimeout(() => URL.revokeObjectURL(url), 8000);
 
-    document.getElementById('exp-progress-fill').style.width = '100%';
-    document.getElementById('exp-progress-label').textContent = 'Done! Saved as .webm';
-    document.getElementById('exp-btn-label').textContent = '✓ SAVED';
+    document.getElementById('exp-progress-fill').style.width  = '100%';
+    document.getElementById('exp-progress-label').textContent = '✓ Done — saved as .webm';
+    document.getElementById('exp-btn-label').textContent      = '✓ SAVED';
 
-    // Restore preview
-    const mc = document.getElementById('main-canvas');
-    const scale = Math.min(1, VIDEO_MAX_DIM / Math.max(video.videoWidth, video.videoHeight));
-    mc.width  = Math.round(video.videoWidth  * scale);
-    mc.height = Math.round(video.videoHeight * scale);
-    state.videoEl = video; state.sourceImage = video; state.fileType = 'video';
-    video.loop = true;
-    video.play().then(() => startVideoRender(video)).catch(() => {});
-    setTimeout(() => { resetExportUI(); closeExportModal(); }, 2000);
+    // Restart live preview
+    if (state.videoEl === video) {
+      state.sourceImage = video;
+      video.loop = true;
+      video.currentTime = 0;
+      video.play()
+        .then(() => { _activeToken = exportToken; _startVideoLoop(video, exportToken); })
+        .catch(() => {});
+    }
+    setTimeout(() => { resetExportUI(); closeExportModal(); }, 2500);
   };
 
-  // Stop live preview without destroying video
-  _videoLoopActive = false;
-  if (_rafId) { cancelAnimationFrame(_rafId); _rafId = null; }
-
-  // Swap main canvas to export size while encoding
-  const mc = document.getElementById('main-canvas');
-  const prevW = mc.width, prevH = mc.height;
-  mc.width = tw; mc.height = th;
-  state.sourceImage = video;
-
-  // Seek to beginning
-  video.pause();
+  // Seek video to start, then record it playing through once in real time
+  video.loop        = false;
   video.currentTime = 0;
-  video.loop = false;
-  await new Promise(r => setTimeout(r, 300)); // brief settle
+  await new Promise(r => setTimeout(r, 200));
 
-  recorder.start(250);
+  recorder.start(500); // collect data every 500ms
 
-  document.getElementById('exp-progress-label').textContent = 'Recording… (plays through once)';
+  document.getElementById('exp-progress-label').textContent = 'Recording… video plays through once';
 
-  // Play video forward in real time, render each frame
-  // Use timeupdate event (fires ~4-6x per second) for progress,
-  // but render via rAF for smooth capture
-  let exportDone = false;
-
+  // rAF loop renders riso effect and copies to capture canvas
+  let done = false;
   await new Promise(resolve => {
-    let localRaf = null;
+    let raf = null;
 
-    const renderFrame = () => {
-      if (exportDone) return;
+    function renderExportFrame() {
+      if (done) return;
 
-      // Render riso frame into main canvas, copy to render canvas
       if (video.readyState >= 2) {
         processImage();
-        renderCanvas.getContext('2d').drawImage(mc, 0, 0);
+        capCtx.drawImage(mc, 0, 0);
       }
 
-      // Update progress
-      const pct = Math.min(99, Math.round((video.currentTime / duration) * 100));
-      document.getElementById('exp-progress-fill').style.width = pct + '%';
+      const pct = isFinite(duration) && duration > 0
+        ? Math.min(99, Math.round(video.currentTime / duration * 100))
+        : 0;
+      document.getElementById('exp-progress-fill').style.width  = pct + '%';
       document.getElementById('exp-progress-label').textContent =
-        `Encoding… ${Math.floor(video.currentTime)}s / ${Math.floor(duration)}s`;
+        'Encoding ' + Math.floor(video.currentTime) + 's / ' + Math.floor(duration) + 's';
 
-      localRaf = requestAnimationFrame(renderFrame);
-    };
+      raf = requestAnimationFrame(renderExportFrame);
+    }
 
-    // Video ended — we're done
-    const onEnded = () => {
-      exportDone = true;
-      if (localRaf) cancelAnimationFrame(localRaf);
+    function onEnded() {
+      if (done) return;
+      done = true;
       video.removeEventListener('ended', onEnded);
-      // Render one last frame
+      if (raf) { cancelAnimationFrame(raf); raf = null; }
+      // Final frame
       if (video.readyState >= 2) {
         processImage();
-        renderCanvas.getContext('2d').drawImage(mc, 0, 0);
+        capCtx.drawImage(mc, 0, 0);
       }
-      setTimeout(() => { recorder.stop(); resolve(); }, 300);
-    };
+      setTimeout(() => { recorder.stop(); resolve(); }, 400);
+    }
 
-    // Safety timeout — if video somehow never ends, stop after duration + 5s
-    const safetyMs = (duration + 5) * 1000;
-    const safetyTimer = setTimeout(() => {
-      if (!exportDone) {
-        exportDone = true;
-        if (localRaf) cancelAnimationFrame(localRaf);
-        video.removeEventListener('ended', onEnded);
-        recorder.stop();
-        resolve();
-      }
-    }, safetyMs);
+    // Safety: if ended never fires, stop after duration + 8s
+    const safety = setTimeout(() => {
+      if (!done) { done = true; if (raf) cancelAnimationFrame(raf); recorder.stop(); resolve(); }
+    }, (duration + 8) * 1000);
 
     video.addEventListener('ended', onEnded);
 
-    // Start rendering and playing simultaneously
-    localRaf = requestAnimationFrame(renderFrame);
-    video.play().catch(err => {
-      console.warn('Export play failed:', err);
-      clearTimeout(safetyTimer);
-      exportDone = true;
-      if (localRaf) cancelAnimationFrame(localRaf);
-      recorder.stop();
-      resolve();
-    });
+    // Start playing and rendering simultaneously
+    video.play()
+      .then(() => { raf = requestAnimationFrame(renderExportFrame); })
+      .catch(err => {
+        clearTimeout(safety);
+        done = true;
+        recorder.stop();
+        resolve();
+        alert('Could not play video for export: ' + err.message);
+      });
   });
-
-  // Restore main canvas preview size
-  mc.width = prevW; mc.height = prevH;
 }
 
 // ══════════════════════════════════════════════════════
